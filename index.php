@@ -237,20 +237,21 @@ $PAGE->set_title(get_string('pluginname', 'report_examstats'));
 $PAGE->set_heading(get_string('pluginname', 'report_examstats'));
 
 echo $OUTPUT->header();
+echo '<div class="report-examstats">';
 
 // CSS Layout Rules & Clean Print Enhancements
 echo '<style>
-    .uniform-label { color: #343a40 !important; font-weight: bold; margin-right: 8px; }
-    .leaderboard-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 2px solid #fff; }
-    .leaderboard-card { background: #fff; min-height: 170px; border-radius: 8px; position: relative; transition: transform 0.2s; }
-    .leaderboard-card:hover { transform: translateY(-3px); }
-    .table, .card, .progress, .row, .leaderboard-card { page-break-inside: avoid; break-inside: avoid; }
+    .report-examstats .re-label { color: #343a40 !important; font-weight: bold; margin-right: 8px; }
+    .report-examstats .re-leaderboard-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 2px solid #fff; }
+    .report-examstats .re-leaderboard-card { background: #fff; min-height: 170px; border-radius: 8px; position: relative; transition: transform 0.2s; }
+    .report-examstats .re-leaderboard-card:hover { transform: translateY(-3px); }
+    .report-examstats .table, .report-examstats .card, .report-examstats .progress, .report-examstats .re-leaderboard-card { page-break-inside: avoid; break-inside: avoid; }
     @media print {
         body { background: #fff !important; }
         body * { visibility: hidden; }
-        #analytics-dashboard, #analytics-dashboard * { visibility: visible; }
-        #analytics-dashboard { position: absolute; left: 0; top: 0; width: 100%; display: block !important; border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; }
-        .no-print { display: none !important; }
+        #re-analytics-dashboard, #re-analytics-dashboard * { visibility: visible; }
+        #re-analytics-dashboard { position: absolute; left: 0; top: 0; width: 100%; display: block !important; border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; }
+        .re-no-print { display: none !important; }
     }
 </style>';
 
@@ -258,11 +259,11 @@ echo '<style>
 $courses = $DB->get_records('course', null, 'fullname ASC', 'id, fullname');
 
 // DISPLAY: Filter Card
-echo '<div class="card mb-4 bg-light no-print">';
+echo '<div class="card mb-4 bg-light re-no-print">';
 echo '  <div class="card-body py-3">';
 echo '    <form method="get" action="index.php" class="form-inline m-0">';
 echo '      <div class="form-group mr-4 mb-2">';
-echo '        <label class="uniform-label">Course:</label>';
+echo '        <label class="re-label">Course:</label>';
 echo '        <select name="courseid" class="form-control" onchange="this.form.submit()">';
 echo '          <option value="0">-- Select Course --</option>';
 foreach ($courses as $c) {
@@ -292,7 +293,7 @@ if ($courseid > 0) {
     );
 
     echo '      <div class="form-group mr-4 mb-2">';
-    echo '        <label class="uniform-label">Theory Exam:</label>';
+    echo '        <label class="re-label">Theory Exam:</label>';
     echo '        <select name="quizid_theory" class="form-control">';
     echo '          <option value="0">-- None / Deselect --</option>';
     if ($theory_quizzes) {
@@ -305,7 +306,7 @@ if ($courseid > 0) {
     echo '      </div>';
 
     echo '      <div class="form-group mr-4 mb-2">';
-    echo '        <label class="uniform-label">OSPE Exam:</label>';
+    echo '        <label class="re-label">OSPE Exam:</label>';
     echo '        <select name="quizid_ospe" class="form-control">';
     echo '          <option value="0">-- None / Deselect --</option>';
     if ($ospe_quizzes) {
@@ -434,7 +435,7 @@ if ($courseid > 0 && $any_exam_selected) {
     $fail_percent = round(($failed_count / $evaluated_pool_total) * 100, 1);
     
     // Action Controls Row
-    echo '<div class="d-flex justify-content-end mb-3 no-print">';
+    echo '<div class="d-flex justify-content-end mb-3 re-no-print">';
     echo '  <button onclick="window.print()" class="btn btn-outline-info btn-sm mr-2">'
         . '<i class="fa fa-print mr-1"></i> Print Report</button>';
 
@@ -477,7 +478,7 @@ if ($courseid > 0 && $any_exam_selected) {
     .epr-dropdown-divider { border-top:2px solid #e9ecef; margin:4px 0; }
     </style>';
 
-    echo '  <div class="epr-dropdown no-print">
+    echo '  <div class="epr-dropdown re-no-print">
       <button type="button" onclick="
         var m=document.getElementById(\'epr-csv-menu\');
         m.classList.toggle(\'show\');
@@ -507,7 +508,7 @@ if ($courseid > 0 && $any_exam_selected) {
     </div>';
     echo '</div>';
     
-    echo '<div id="analytics-dashboard" class="card border-0 shadow-sm">';
+    echo '<div id="re-analytics-dashboard" class="card border-0 shadow-sm">';
     echo '  <div class="card-body p-4">';
     
     // Professional Header Block: Always rendered contextually at the top of the analytics viewport
@@ -733,7 +734,7 @@ if ($courseid > 0 && $any_exam_selected) {
     foreach ($top_five as $top_uid => $achieved_score) {
         if (isset($enrolled_users[$top_uid])) {
             $student_user = $enrolled_users[$top_uid];
-            $user_pic = $OUTPUT->user_picture($student_user, array('size' => 50, 'link' => false, 'class' => 'leaderboard-img mb-2'));
+            $user_pic = $OUTPUT->user_picture($student_user, array('size' => 50, 'link' => false, 'class' => 're-leaderboard-img mb-2'));
             
             echo '  <div class="mb-3 px-2 text-center" style="flex: 1; min-width: 175px; max-width: 210px;">';
             echo '    <div class="card border shadow-sm p-3 leaderboard-card">';
@@ -753,7 +754,8 @@ if ($courseid > 0 && $any_exam_selected) {
     echo '  </div>';
     echo '</div>';
 } else {
-    echo '<div class="alert alert-info no-print">Please select an exam configuration and click "Apply Filters" to load the matrix dashboard.</div>';
+    echo '<div class="alert alert-info re-no-print">Please select an exam configuration and click "Apply Filters" to load the matrix dashboard.</div>';
 }
 
+echo '</div>'; // End .report-examstats wrapper.
 echo $OUTPUT->footer();
