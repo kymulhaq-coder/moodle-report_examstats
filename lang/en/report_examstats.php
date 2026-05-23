@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Exam Performance Report';
 $string['privacy:metadata'] = 'The Exam Performance Report displays aggregated quiz grade data and does not store personal information directly.';
+$string['privacy:metadata:core_grades'] = 'The Exam Performance Report reads grade data from the Moodle core grades subsystem (grade_grades and grade_items tables) in order to display exam performance analytics. No personal data is stored by this plugin independently.';
 $string['selectcourse'] = '-- Select Course --';
 $string['course'] = 'Course:';
 $string['theoryexam'] = 'Theory Exam:';
