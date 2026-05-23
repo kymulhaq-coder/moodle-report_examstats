@@ -514,8 +514,8 @@ if ($courseid > 0 && $any_exam_selected) {
     // Professional Header Block: Always rendered contextually at the top of the analytics viewport
     echo '    <div class="mb-4 text-left border-bottom pb-3">';
     echo '      <h3 class="font-weight-bold text-dark mb-2">Exam Performance Report</h3>';
-    echo '      <div class="text-secondary font-weight-bold" style="font-size: 1.05rem; line-height: 1.6;">Course: <span class="text-dark font-weight-normal">' . s($course_record->fullname) . '</span></div>';
-    echo '      <div class="text-secondary font-weight-bold" style="font-size: 1.05rem; line-height: 1.6;">Exam Target: <span class="text-dark font-weight-normal">' . s($printed_exam_titles) . '</span></div>';
+    echo '      <div class="font-weight-bold" style="font-size: 1.05rem; line-height: 1.6; color: #c0392b;">Course: <span class="text-dark font-weight-normal">' . s($course_record->fullname) . '</span></div>';
+    echo '      <div class="font-weight-bold" style="font-size: 1.05rem; line-height: 1.6; color: #c0392b;">Exam Target: <span class="text-dark font-weight-normal">' . s($printed_exam_titles) . '</span></div>';
     echo '    </div>';
     
     // Attendance Calculation Blocks
@@ -647,7 +647,7 @@ if ($courseid > 0 && $any_exam_selected) {
     $total_graded = count($bands['A']) + count($bands['B']) + count($bands['C']) + count($bands['D']);
     $total_graded = ($total_graded > 0) ? $total_graded : 1;
     echo '    <hr class="my-4">';
-    echo '    <h5 class="mb-3 font-weight-bold text-secondary text-left">'
+    echo '    <h5 class="mb-3 font-weight-bold text-left" style="color: #c0392b;">'
         . '<i class="fa fa-bar-chart mr-2"></i>Performance Band Distribution</h5>';
     echo '    <div class="table-responsive mb-2">';
     echo '      <table class="table table-bordered m-0 text-center">';
@@ -708,7 +708,7 @@ if ($courseid > 0 && $any_exam_selected) {
             }
         }
         echo '    <div class="mt-4">';
-        echo '      <h5 class="mb-3 font-weight-bold text-secondary text-left"><i class="fa fa-stethoscope mr-2"></i>Failure Breakdown Diagnostics</h5>';
+        echo '      <h5 class="mb-3 font-weight-bold text-left" style="color: #c0392b;"><i class="fa fa-stethoscope mr-2"></i>Failure Breakdown Diagnostics</h5>';
         echo '      <div class="table-responsive">';
         echo '        <table class="table table-bordered table-striped m-0 text-left">';
         echo '          <thead class="thead-dark"><tr><th>Point of Failure</th><th class="text-center">Student Count</th></tr></thead>';
