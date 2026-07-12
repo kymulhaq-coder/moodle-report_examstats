@@ -16,10 +16,10 @@ distribution, failure diagnostics, and CSV exports.
   the report adapts to whatever naming convention your institution uses
   (Skill, Practical, OSCE, OSPE, or any custom label).
 - **Calculation Basis** — choose how the pass/fail cohort is defined:
-  - **Appeared Cohort (Standard)** — only students who attempted at
+  - **Appeared Cohort** — only students who attempted at
     least one of the selected exam(s) are included in the pass/fail
     math and band distribution.
-  - **Total Cohort (KMU Rule)** — every enrolled student is included;
+  - **Total Cohort** — every enrolled student is included;
     anyone who didn't attempt an exam is scored zero and counted as
     failed. Useful for institutions that require absentees to be
     reflected in overall pass/fail statistics.
