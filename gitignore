@@ -1,0 +1,13 @@
+# Runtime artifacts that PHP/Apache can generate inside this plugin folder
+# during local development. These must never be committed or shipped in a
+# release zip — Moodle plugin directories are web-accessible and must be
+# treated as read-only at runtime.
+error_log
+*.log
+
+# Common OS/editor cruft.
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

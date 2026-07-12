@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'report_examstats';
-$plugin->release = '1.0.0';
-$plugin->version = 2026051900; // Updated release version stamp.
+$plugin->release = '1.6.4';
+$plugin->version = 2026071108; // Properly fixed KPI card height mismatch (previous fix in 1.6.3 only addressed the text-wrap symptom, not the root cause). .re-kpi-inner now has height:100% so it fills its parent column's stretched height, which Bootstrap's row already equalizes to the tallest sibling — all 4 cards now always match regardless of how much content each one holds.
 $plugin->requires = 2025041404;
 $plugin->maturity = MATURITY_STABLE;

@@ -18,8 +18,12 @@
  * Main report page for Exam Performance Report.
  *
  * Displays pass/fail statistics, attendance, KPI cards, failure breakdown
- * diagnostics, and a top-performers leaderboard for Theory, OSPE, or
- * combined Theory+OSPE quiz assessments.
+ * diagnostics, and a top-performers leaderboard for Theory, Skill Exam, or
+ * combined Theory+Skill Exam quiz assessments.
+ *
+ * Rendering is handled via Mustache templates under templates/.
+ * JavaScript interactions are handled via amd/src/dashboard.js.
+ * CSS lives in styles.css (auto-loaded by Moodle).
  *
  * @package     report_examstats
  * @copyright   2026 Khayam <kymulhaq@gmail.com>
@@ -29,25 +33,99 @@
 // Security check: Ensure this file is running inside Moodle.
 require_once(__DIR__ . '/../../config.php');
 
-// Require admin access to view this page.
 require_login();
-$context = context_system::instance();
-require_capability('moodle/site:config', $context);
 
-// Get URL parameters.
+// -------------------------------------------------------------------------
+// Input parameters
+// -------------------------------------------------------------------------
 $courseid      = optional_param('courseid',      0,  PARAM_INT);
 $quizid_theory = optional_param('quizid_theory', 0,  PARAM_INT);
-$quizid_ospe   = optional_param('quizid_ospe',   0,  PARAM_INT);
+$quizid_skill   = optional_param('quizid_skill',   0,  PARAM_INT);
+$calc_basis    = optional_param('calc_basis',    'appeared', PARAM_ALPHA); // Appeared vs Registered (KMU rule).
 $export        = optional_param('export',        '', PARAM_ALPHA);
 
+// -------------------------------------------------------------------------
+// Guard against stale quiz IDs left over from a previously-selected course.
+//
+// The course dropdown auto-submits on change, which can carry forward the
+// Theory/Skill exam selections from whichever course was previously shown.
+// Since quiz ids are unique site-wide, a stale id would otherwise still
+// resolve to a real (but wrong-course) grade item further down. Confirm
+// each selected quiz actually belongs to $courseid before trusting it.
+// -------------------------------------------------------------------------
+if ($courseid > 0) {
+    if ($quizid_theory > 0 && !$DB->record_exists('quiz', array('id' => $quizid_theory, 'course' => $courseid))) {
+        $quizid_theory = 0;
+    }
+    if ($quizid_skill > 0 && !$DB->record_exists('quiz', array('id' => $quizid_skill, 'course' => $courseid))) {
+        $quizid_skill = 0;
+    }
+}
+
 // Determine active exam mode.
-$has_theory       = ($quizid_theory > 0);
-$has_ospe         = ($quizid_ospe   > 0);
-$is_combined      = ($has_theory && $has_ospe);
-$any_exam_selected = ($has_theory || $has_ospe);
+$has_theory        = ($quizid_theory > 0);
+$has_skill          = ($quizid_skill   > 0);
+$is_combined       = ($has_theory && $has_skill);
+$any_exam_selected = ($has_theory || $has_skill);
+
+// -------------------------------------------------------------------------
+// Capability check.
+//
+// Managers (and admins) hold report/examstats:view at system level and can
+// browse the report for any course. Teachers normally hold the capability
+// only at course level, so once a course is selected we re-check there.
+// This also keeps a teacher of Course A from viewing Course B's data by
+// editing the courseid in the URL.
+// -------------------------------------------------------------------------
+$systemcontext = context_system::instance();
+$hassystemview = has_capability('report/examstats:view', $systemcontext);
+
+if ($courseid > 0) {
+    $course = get_course($courseid);
+    $context = context_course::instance($courseid);
+    require_login($course);
+    require_capability('report/examstats:view', $context);
+} else {
+    $context = $systemcontext;
+    if (!$hassystemview) {
+        // No sitewide access: the user must hold the capability in at least
+        // one course to be allowed onto the course-selector screen.
+        $ownedcourses = get_user_capability_course('report/examstats:view', null, false, 'id');
+        if (empty($ownedcourses)) {
+            require_capability('report/examstats:view', $systemcontext);
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
+// Configurable performance band thresholds and labels (with sane defaults
+// if the admin hasn't saved the settings page yet). Loaded here, before
+// the CSV Export Engine, so both the CSV export and the on-screen
+// dashboard use the exact same thresholds/labels and can never disagree.
+// -------------------------------------------------------------------------
+$band_a_min = get_config('report_examstats', 'band_a_min');
+$band_a_min = ($band_a_min !== false && $band_a_min !== '') ? floatval($band_a_min) : 80;
+$band_b_min = get_config('report_examstats', 'band_b_min');
+$band_b_min = ($band_b_min !== false && $band_b_min !== '') ? floatval($band_b_min) : 60;
+$band_c_min = get_config('report_examstats', 'band_c_min');
+$band_c_min = ($band_c_min !== false && $band_c_min !== '') ? floatval($band_c_min) : 50;
+
+$band_a_label = get_config('report_examstats', 'band_a_label');
+$band_a_label = ($band_a_label !== false && $band_a_label !== '') ? $band_a_label : get_string('highachieverdesc', 'report_examstats');
+$band_b_label = get_config('report_examstats', 'band_b_label');
+$band_b_label = ($band_b_label !== false && $band_b_label !== '') ? $band_b_label : get_string('satisfactorydesc', 'report_examstats');
+$band_c_label = get_config('report_examstats', 'band_c_label');
+$band_c_label = ($band_c_label !== false && $band_c_label !== '') ? $band_c_label : get_string('borderlinedesc', 'report_examstats');
+$band_d_label = get_config('report_examstats', 'band_d_label');
+$band_d_label = ($band_d_label !== false && $band_d_label !== '') ? $band_d_label : get_string('faildesc', 'report_examstats');
+
+// Localized Pass/Fail status text, shared by the CSV export and dashboard.
+$str_pass = get_string('statuspass', 'report_examstats');
+$str_fail = get_string('statusfail', 'report_examstats');
 
 // -------------------------------------------------------------------------
 // CSV Export Engine (Supports Single and Combined configurations)
+// Runs before any page output and exits early.
 // -------------------------------------------------------------------------
 if ($export !== '' && $courseid > 0 && $any_exam_selected) {
     $coursecontext = context_course::instance($courseid);
@@ -60,26 +138,27 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
         $theory_item = $has_theory
             ? $DB->get_record('grade_items', array('iteminstance' => $quizid_theory, 'itemmodule' => 'quiz'))
             : null;
-        $ospe_item = $has_ospe
-            ? $DB->get_record('grade_items', array('iteminstance' => $quizid_ospe, 'itemmodule' => 'quiz'))
+        $skill_item = $has_skill
+            ? $DB->get_record('grade_items', array('iteminstance' => $quizid_skill, 'itemmodule' => 'quiz'))
             : null;
 
         // Max marks and pass thresholds.
         $t_max  = $theory_item ? floatval($theory_item->grademax) : 0;
-        $o_max  = $ospe_item   ? floatval($ospe_item->grademax)   : 0;
+        $skill_max  = $skill_item   ? floatval($skill_item->grademax)   : 0;
         $t_pass = ($theory_item && floatval($theory_item->gradepass) > 0)
             ? floatval($theory_item->gradepass) : $t_max * 0.50;
-        $o_pass = ($ospe_item && floatval($ospe_item->gradepass) > 0)
-            ? floatval($ospe_item->gradepass) : $o_max * 0.50;
+        $skill_pass = ($skill_item && floatval($skill_item->gradepass) > 0)
+            ? floatval($skill_item->gradepass) : $skill_max * 0.50;
 
         // Build score map.
-        $t_grades = array(); $o_grades = array();
+        $t_grades = array();
+        $skill_grades = array();
         $gsql = "SELECT userid, finalgrade FROM {grade_grades} WHERE itemid = ?";
         if ($theory_item) {
             $t_grades = $DB->get_records_sql_menu($gsql, array($theory_item->id));
         }
-        if ($ospe_item) {
-            $o_grades = $DB->get_records_sql_menu($gsql, array($ospe_item->id));
+        if ($skill_item) {
+            $skill_grades = $DB->get_records_sql_menu($gsql, array($skill_item->id));
         }
 
         // Classify every student into a band with full data.
@@ -88,39 +167,50 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
             $uid = $su->id;
             $ts  = (isset($t_grades[$uid]) && floatval($t_grades[$uid]) > 0)
                 ? floatval($t_grades[$uid]) : 0;
-            $os  = (isset($o_grades[$uid]) && floatval($o_grades[$uid]) > 0)
-                ? floatval($o_grades[$uid]) : 0;
+            $skillscore  = (isset($skill_grades[$uid]) && floatval($skill_grades[$uid]) > 0)
+                ? floatval($skill_grades[$uid]) : 0;
+
+            // Eligibility rule shared with the on-screen dashboard: "registered"
+            // (KMU rule) includes every enrolled student, scoring absentees as
+            // zero; "appeared" (standard) only includes students who attempted
+            // at least one of the selected exam(s).
+            if ($calc_basis === 'registered') {
+                $csv_evaluate = true;
+            } else if ($is_combined) {
+                $csv_evaluate = ($ts > 0 || $skillscore > 0);
+            } else {
+                $csv_evaluate = ($has_theory ? ($ts > 0) : ($skillscore > 0));
+            }
+            if (!$csv_evaluate) {
+                continue;
+            }
 
             if ($is_combined) {
-                if ($ts <= 0 && $os <= 0) { continue; }
-                $grand_total = $ts + $os;
-                $maxval      = $t_max + $o_max;
-                // Per-component remarks.
-                $t_remark = ($ts >= $t_pass) ? 'Pass' : 'Fail';
-                $o_remark = ($os >= $o_pass) ? 'Pass' : 'Fail';
-                // Overall status: Fail if EITHER component is failed.
-                $status = ($t_remark === 'Pass' && $o_remark === 'Pass') ? 'Pass' : 'Fail';
+                $grand_total = $ts + $skillscore;
+                $maxval      = $t_max + $skill_max;
+                $t_remark    = ($ts >= $t_pass) ? $str_pass : $str_fail;
+                $skill_remark    = ($skillscore >= $skill_pass) ? $str_pass : $str_fail;
+                $status      = ($t_remark === $str_pass && $skill_remark === $str_pass) ? $str_pass : $str_fail;
             } else {
-                $active_score = $has_theory ? $ts : $os;
-                if ($active_score <= 0) { continue; }
-                $grand_total  = $active_score;
-                $maxval       = $has_theory ? $t_max : $o_max;
-                $pass_line    = $has_theory ? $t_pass : $o_pass;
-                $t_remark     = '';
-                $o_remark     = '';
-                $status       = ($active_score >= $pass_line) ? 'Pass' : 'Fail';
+                $active_score = $has_theory ? $ts : $skillscore;
+                $grand_total = $active_score;
+                $maxval      = $has_theory ? $t_max : $skill_max;
+                $pass_line   = $has_theory ? $t_pass : $skill_pass;
+                $t_remark    = '';
+                $skill_remark    = '';
+                $status      = ($active_score >= $pass_line) ? $str_pass : $str_fail;
             }
 
             $pct = ($maxval > 0) ? ($grand_total / $maxval) * 100 : 0;
 
-            if ($pct >= 80) {
-                $band = 'A'; $descriptor = 'High Achiever';
-            } else if ($pct >= 60) {
-                $band = 'B'; $descriptor = 'Satisfactory';
-            } else if ($pct >= 50) {
-                $band = 'C'; $descriptor = 'Borderline';
+            if ($pct >= $band_a_min) {
+                $band = 'A'; $descriptor = $band_a_label;
+            } else if ($pct >= $band_b_min) {
+                $band = 'B'; $descriptor = $band_b_label;
+            } else if ($pct >= $band_c_min) {
+                $band = 'C'; $descriptor = $band_c_label;
             } else {
-                $band = 'D'; $descriptor = 'Fail';
+                $band = 'D'; $descriptor = $band_d_label;
             }
 
             $band_rows[$uid] = array(
@@ -129,8 +219,8 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
                 'email'       => $su->email,
                 'ts'          => $ts,
                 't_remark'    => $t_remark,
-                'os'          => $os,
-                'o_remark'    => $o_remark,
+                'skillscore'          => $skillscore,
+                'skill_remark'    => $skill_remark,
                 'grand_total' => $grand_total,
                 'pct'         => round($pct, 1),
                 'descriptor'  => $descriptor,
@@ -147,13 +237,22 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
             'borderline'    => 'C',
         );
 
+        // Filenames now follow the admin's configured band labels (settings
+        // page) instead of hardcoded English names, so a renamed band (e.g.
+        // "Fail" -> "Poor Performance") is reflected in the downloaded file
+        // too, not just the on-screen table.
         $filename_map = array(
-            'failedcsv'      => 'Failed_Students',
-            'highachievers'  => 'High_Achievers',
-            'satisfactory'   => 'Satisfactory_Students',
-            'borderline'     => 'Borderline_Students',
+            'failedcsv'      => preg_replace('/[^A-Za-z0-9_\-]/', '', str_replace(' ', '_', trim($band_d_label))),
+            'highachievers'  => preg_replace('/[^A-Za-z0-9_\-]/', '', str_replace(' ', '_', trim($band_a_label))),
+            'satisfactory'   => preg_replace('/[^A-Za-z0-9_\-]/', '', str_replace(' ', '_', trim($band_b_label))),
+            'borderline'     => preg_replace('/[^A-Za-z0-9_\-]/', '', str_replace(' ', '_', trim($band_c_label))),
             'completeresult' => 'Complete_Result',
         );
+        foreach ($filename_map as $key => $value) {
+            if ($value === '') {
+                $filename_map[$key] = 'Result';
+            }
+        }
 
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="'
@@ -163,29 +262,31 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
         // Dynamic column headers based on actual max marks.
         if ($is_combined) {
             fputcsv($out, array(
-                'First Name',
-                'Last Name',
-                'Email',
-                'Theory Score (out of ' . $t_max . ')',
-                'Remarks',
-                'OSPE Score (out of ' . $o_max . ')',
-                'Remarks',
-                'Grand Total (out of ' . ($t_max + $o_max) . ')',
-                '% of Max',
-                'Descriptor',
-                'Status',
+                get_string('csv_firstname', 'report_examstats'),
+                get_string('csv_lastname', 'report_examstats'),
+                get_string('csv_email', 'report_examstats'),
+                get_string('csv_theoryscore', 'report_examstats') . ' (' . get_string('csv_outof', 'report_examstats') . ' ' . $t_max . ')',
+                get_string('csv_remarks', 'report_examstats'),
+                get_string('csv_skillscore', 'report_examstats') . ' (' . get_string('csv_outof', 'report_examstats') . ' ' . $skill_max . ')',
+                get_string('csv_remarks', 'report_examstats'),
+                get_string('csv_grandtotal', 'report_examstats') . ' (' . get_string('csv_outof', 'report_examstats') . ' ' . ($t_max + $skill_max) . ')',
+                get_string('csv_percentofmax', 'report_examstats'),
+                get_string('csv_descriptor', 'report_examstats'),
+                get_string('csv_status', 'report_examstats'),
             ));
         } else {
-            $single_max   = $has_theory ? $t_max : $o_max;
-            $single_label = $has_theory ? 'Theory Score' : 'OSPE Score';
+            $single_max   = $has_theory ? $t_max : $skill_max;
+            $single_label = $has_theory
+                ? get_string('csv_theoryscore', 'report_examstats')
+                : get_string('csv_skillscore', 'report_examstats');
             fputcsv($out, array(
-                'First Name',
-                'Last Name',
-                'Email',
-                $single_label . ' (out of ' . $single_max . ')',
-                'Remarks',
-                '% of Max',
-                'Descriptor',
+                get_string('csv_firstname', 'report_examstats'),
+                get_string('csv_lastname', 'report_examstats'),
+                get_string('csv_email', 'report_examstats'),
+                $single_label . ' (' . get_string('csv_outof', 'report_examstats') . ' ' . $single_max . ')',
+                get_string('csv_remarks', 'report_examstats'),
+                get_string('csv_percentofmax', 'report_examstats'),
+                get_string('csv_descriptor', 'report_examstats'),
             ));
         }
 
@@ -204,15 +305,15 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
                     $row['email'],
                     $row['ts'],
                     $row['t_remark'],
-                    $row['os'],
-                    $row['o_remark'],
+                    $row['skillscore'],
+                    $row['skill_remark'],
                     $row['grand_total'],
                     $row['pct'] . '%',
                     $row['descriptor'],
                     $row['status'],
                 ));
             } else {
-                $single_score = $has_theory ? $row['ts'] : $row['os'];
+                $single_score = $has_theory ? $row['ts'] : $row['skillscore'];
                 fputcsv($out, array(
                     $row['firstname'],
                     $row['lastname'],
@@ -229,182 +330,264 @@ if ($export !== '' && $courseid > 0 && $any_exam_selected) {
     }
 }
 
-// Initialise Moodle page.
+// -------------------------------------------------------------------------
+// Initialise Moodle page
+// -------------------------------------------------------------------------
 $url = new moodle_url('/report/examstats/index.php');
 $PAGE->set_url($url);
 $PAGE->set_context($context);
 $PAGE->set_title(get_string('pluginname', 'report_examstats'));
 $PAGE->set_heading(get_string('pluginname', 'report_examstats'));
 
+// Explicit, version-safe scoping hook for styles.css — lets us namespace
+// plugin CSS (especially the print rules) to only this page instead of
+// leaking global selectors like bare html/body across all of Moodle.
+$PAGE->add_body_class('report-examstats');
+
+// Register AMD module — replaces all inline onclick handlers.
+$PAGE->requires->js_call_amd('report_examstats/dashboard', 'init');
+
 echo $OUTPUT->header();
 echo '<div class="report-examstats">';
 
-// CSS Layout Rules & Clean Print Enhancements
-echo '<style>
-    .report-examstats .re-label { color: #343a40 !important; font-weight: bold; margin-right: 8px; }
-    .report-examstats .re-leaderboard-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 2px solid #fff; }
-    .report-examstats .re-leaderboard-card { background: #fff; min-height: 170px; border-radius: 8px; position: relative; transition: transform 0.2s; }
-    .report-examstats .re-leaderboard-card:hover { transform: translateY(-3px); }
-    .report-examstats .table, .report-examstats .card, .report-examstats .progress, .report-examstats .re-leaderboard-card { page-break-inside: avoid; break-inside: avoid; }
-    @media print {
-        body { background: #fff !important; }
-        body * { visibility: hidden; }
-        #re-analytics-dashboard, #re-analytics-dashboard * { visibility: visible; }
-        #re-analytics-dashboard { position: absolute; left: 0; top: 0; width: 100%; display: block !important; border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; }
-        .re-no-print { display: none !important; }
-    }
-</style>';
-
-// Fetch baseline Course structure
-$courses = $DB->get_records('course', null, 'fullname ASC', 'id, fullname');
-
-// DISPLAY: Filter Card
-echo '<div class="card mb-4 bg-light re-no-print">';
-echo '  <div class="card-body py-3">';
-echo '    <form method="get" action="index.php" class="form-inline m-0">';
-echo '      <div class="form-group mr-4 mb-2">';
-echo '        <label class="re-label">Course:</label>';
-echo '        <select name="courseid" class="form-control" onchange="this.form.submit()">';
-echo '          <option value="0">-- Select Course --</option>';
-foreach ($courses as $c) {
-    $sel = ($c->id == $courseid) ? 'selected' : '';
-    echo '<option value="' . $c->id . '" ' . $sel . '>' . s($c->fullname) . '</option>';
+// -------------------------------------------------------------------------
+// Filter form template data
+// -------------------------------------------------------------------------
+if ($hassystemview) {
+    // Managers/admins with sitewide access can browse every course.
+    $courses = $DB->get_records('course', null, 'fullname ASC', 'id, fullname');
+} else {
+    // Teachers only see courses where they hold report/examstats:view.
+    $courses = get_user_capability_course('report/examstats:view', null, false, 'id, fullname', 'fullname ASC');
+    $courses = $courses ? $courses : array();
 }
-echo '        </select>';
-echo '      </div>';
+
+$courses_data = array();
+foreach ($courses as $c) {
+    $courses_data[] = array(
+        'id'       => $c->id,
+        'fullname' => $c->fullname,
+        'selected' => ($c->id == $courseid),
+    );
+}
+
+$theory_quizzes_data = array();
+$skill_quizzes_data   = array();
 
 if ($courseid > 0) {
-    // Theory dropdown: only quizzes whose name contains "Theory" (case-insensitive)
+    // Read admin-configurable quiz name filter patterns (fall back to defaults if not set).
+    $theory_raw = get_config('report_examstats', 'theory_pattern');
+    $theory_pat = '%' . ($theory_raw !== false && $theory_raw !== '' ? $theory_raw : 'Theory') . '%';
+
+    // Skill exam patterns: comma-separated list, e.g. "Skill, OSCE, OSPE,
+    // Practical" — a quiz matches if its name contains any one of these terms.
+    $skill_raw = get_config('report_examstats', 'skill_pattern');
+    $skill_raw = ($skill_raw !== false && $skill_raw !== '') ? $skill_raw : 'Skill';
+    $skill_terms = array_filter(array_map('trim', explode(',', $skill_raw)), function($term) {
+        return $term !== '';
+    });
+    if (empty($skill_terms)) {
+        $skill_terms = array('Skill');
+    }
+
     $theory_quizzes = $DB->get_records_select(
         'quiz',
         'course = ? AND ' . $DB->sql_like('name', '?', false),
-        array($courseid, '%Theory%'),
+        array($courseid, $theory_pat),
         'name ASC',
         'id, name'
     );
 
-    // OSPE dropdown: only quizzes whose name contains "OSPE" or "OSCE" (case-insensitive)
-    $ospe_quizzes = $DB->get_records_select(
+    $skill_like_clauses = array();
+    $skill_like_params   = array($courseid);
+    foreach ($skill_terms as $term) {
+        $skill_like_clauses[] = $DB->sql_like('name', '?', false);
+        $skill_like_params[]  = '%' . $term . '%';
+    }
+
+    $skill_quizzes = $DB->get_records_select(
         'quiz',
-        'course = ? AND (' . $DB->sql_like('name', '?', false) . ' OR ' . $DB->sql_like('name', '?', false) . ')',
-        array($courseid, '%OSPE%', '%OSCE%'),
+        'course = ? AND (' . implode(' OR ', $skill_like_clauses) . ')',
+        $skill_like_params,
         'name ASC',
         'id, name'
     );
 
-    echo '      <div class="form-group mr-4 mb-2">';
-    echo '        <label class="re-label">Theory Exam:</label>';
-    echo '        <select name="quizid_theory" class="form-control">';
-    echo '          <option value="0">-- None / Deselect --</option>';
-    if ($theory_quizzes) {
-        foreach ($theory_quizzes as $q) {
-            $sel = ($q->id == $quizid_theory) ? 'selected' : '';
-            echo '<option value="' . $q->id . '" ' . $sel . '>' . s($q->name) . '</option>';
-        }
+    foreach ($theory_quizzes as $q) {
+        $theory_quizzes_data[] = array(
+            'id'       => $q->id,
+            'name'     => $q->name,
+            'selected' => ($q->id == $quizid_theory),
+        );
     }
-    echo '        </select>';
-    echo '      </div>';
 
-    echo '      <div class="form-group mr-4 mb-2">';
-    echo '        <label class="re-label">OSPE Exam:</label>';
-    echo '        <select name="quizid_ospe" class="form-control">';
-    echo '          <option value="0">-- None / Deselect --</option>';
-    if ($ospe_quizzes) {
-        foreach ($ospe_quizzes as $q) {
-            $sel = ($q->id == $quizid_ospe) ? 'selected' : '';
-            echo '<option value="' . $q->id . '" ' . $sel . '>' . s($q->name) . '</option>';
-        }
+    foreach ($skill_quizzes as $q) {
+        $skill_quizzes_data[] = array(
+            'id'       => $q->id,
+            'name'     => $q->name,
+            'selected' => ($q->id == $quizid_skill),
+        );
     }
-    echo '        </select>';
-    echo '      </div>';
-    
-    echo '      <button type="submit" class="btn btn-primary mb-2"><i class="fa fa-filter mr-1"></i> Apply Filters</button>';
 }
-echo '    </form>';
-echo '  </div>';
-echo '</div>';
 
-// Process Active Statistics Engine
+$calcbasis_options = array(
+    array(
+        'value'    => 'appeared',
+        'label'    => get_string('calcbasisappeared', 'report_examstats'),
+        'selected' => ($calc_basis === 'appeared'),
+    ),
+    array(
+        'value'    => 'registered',
+        'label'    => get_string('calcbasisregistered', 'report_examstats'),
+        'selected' => ($calc_basis === 'registered'),
+    ),
+);
+
+echo $OUTPUT->render_from_template('report_examstats/filterform', array(
+    'courseurl'      => (new moodle_url('/report/examstats/index.php'))->out(false),
+    'courses'        => $courses_data,
+    'courseselected' => ($courseid > 0),
+    'theoryquizzes'  => $theory_quizzes_data,
+    'skillquizzes'   => $skill_quizzes_data,
+    'calcbasisoptions'   => $calcbasis_options,
+    'strcourse'          => get_string('course',        'report_examstats'),
+    'strselectcourse'    => get_string('selectcourse',  'report_examstats'),
+    'strtheoryexam'      => get_string('theoryexam',    'report_examstats'),
+    'strskillexam'       => get_string('skillexam',     'report_examstats'),
+    'strcalcbasis'       => get_string('calcbasis',     'report_examstats'),
+    'strnonedeselect'    => get_string('nonedeselect',  'report_examstats'),
+    'strapplyfilters'    => get_string('applyfilters',  'report_examstats'),
+));
+
+// -------------------------------------------------------------------------
+// Statistics Engine + Dashboard rendering
+// -------------------------------------------------------------------------
 if ($courseid > 0 && $any_exam_selected) {
+
     $course_record = $DB->get_record('course', array('id' => $courseid));
-    
-    // Resolve dynamic active labels for the professional header
+
+    // Resolve exam names for the dashboard header.
     $active_exam_names = array();
-    $theory_item = $has_theory ? $DB->get_record('grade_items', array('iteminstance' => $quizid_theory, 'itemmodule' => 'quiz')) : null;
-    $ospe_item = $has_ospe ? $DB->get_record('grade_items', array('iteminstance' => $quizid_ospe, 'itemmodule' => 'quiz')) : null;
-    
-    if ($theory_item) { $active_exam_names[] = $DB->get_field('quiz', 'name', array('id' => $quizid_theory)); }
-    if ($ospe_item) { $active_exam_names[] = $DB->get_field('quiz', 'name', array('id' => $quizid_ospe)); }
+    $theory_item = $has_theory
+        ? $DB->get_record('grade_items', array('iteminstance' => $quizid_theory, 'itemmodule' => 'quiz'))
+        : null;
+    $skill_item = $has_skill
+        ? $DB->get_record('grade_items', array('iteminstance' => $quizid_skill, 'itemmodule' => 'quiz'))
+        : null;
+
+    if ($theory_item) {
+        $active_exam_names[] = $DB->get_field('quiz', 'name', array('id' => $quizid_theory));
+    }
+    if ($skill_item) {
+        $active_exam_names[] = $DB->get_field('quiz', 'name', array('id' => $quizid_skill));
+    }
     $printed_exam_titles = implode(' & ', $active_exam_names);
 
-    // Filter strictly for users with student role capabilities to completely exclude teachers/admins
-    $enrolled_users = get_enrolled_users(context_course::instance($courseid), 'mod/quiz:attempt', 0, 'u.id, u.firstname, u.lastname, u.picture, u.imagealt, u.email');
+    // Fetch enrolled students only (excludes teachers/admins).
+    //
+    // Includes the full field set $OUTPUT->user_picture() requires (used
+    // later for the leaderboard avatars) — omitting these caused a
+    // "Missing 'firstnamephonetic' property" debugging() notice to be
+    // logged on every single page load.
+    $enrolled_users = get_enrolled_users(
+        context_course::instance($courseid),
+        'mod/quiz:attempt', 0,
+        'u.id, u.picture, u.firstname, u.lastname, u.firstnamephonetic, ' .
+        'u.lastnamephonetic, u.middlename, u.alternatename, u.imagealt, u.email'
+    );
     $total_enrolled = count($enrolled_users);
-    if ($total_enrolled <= 0) { $total_enrolled = 1; }
-    
-    // Arrays to construct metrics mapping
-    $t_grades = array(); $o_grades = array();
+    if ($total_enrolled <= 0) {
+        $total_enrolled = 1;
+    }
+
+    // Build grade maps.
+    $t_grades = array();
+    $skill_grades = array();
     $sql = "SELECT userid, finalgrade FROM {grade_grades} WHERE itemid = ? AND finalgrade IS NOT NULL";
-    
-    if ($has_theory && $theory_item) { $t_grades = $DB->get_records_sql_menu($sql, array($theory_item->id)); }
-    if ($has_ospe && $ospe_item) { $o_grades = $DB->get_records_sql_menu($sql, array($ospe_item->id)); }
-    
-    // Execute Calculations Strategy
-    $passed_count = 0; $failed_count = 0;
-    $p_theory_count = 0; $p_ospe_count = 0; $p_both_count = 0;
-    
+    if ($has_theory && $theory_item) {
+        $t_grades = $DB->get_records_sql_menu($sql, array($theory_item->id));
+    }
+    if ($has_skill && $skill_item) {
+        $skill_grades = $DB->get_records_sql_menu($sql, array($skill_item->id));
+    }
+
+    // Configurable performance band thresholds/labels were already loaded
+    // near the top of the file (shared with the CSV Export Engine above).
+
+    // Run pass/fail and band calculations.
+    $passed_count   = 0;
+    $failed_count   = 0;
+    $p_theory_count = 0;
+    $p_skill_count   = 0;
+    $p_both_count   = 0;
+
     $leaderboard_stack = array();
     $bands = array('A' => array(), 'B' => array(), 'C' => array(), 'D' => array());
-    
+
     foreach ($enrolled_users as $user) {
         $uid = $user->id;
-        $ts = (isset($t_grades[$uid]) && floatval($t_grades[$uid]) > 0) ? floatval($t_grades[$uid]) : 0;
-        $os = (isset($o_grades[$uid]) && floatval($o_grades[$uid]) > 0) ? floatval($o_grades[$uid]) : 0;
-        
+        $ts  = (isset($t_grades[$uid]) && floatval($t_grades[$uid]) > 0)
+            ? floatval($t_grades[$uid]) : 0;
+        $skillscore  = (isset($skill_grades[$uid]) && floatval($skill_grades[$uid]) > 0)
+            ? floatval($skill_grades[$uid]) : 0;
+
         $has_active_t = ($ts > 0);
-        $has_active_o = ($os > 0);
-        
+        $has_active_skill = ($skillscore > 0);
+
         if ($has_active_t) { $p_theory_count++; }
-        if ($has_active_o) { $p_ospe_count++; }
-        if ($has_active_t && $has_active_o) { $p_both_count++; }
+        if ($has_active_skill) { $p_skill_count++; }
+        if ($has_active_t && $has_active_skill) { $p_both_count++; }
 
-        // Evaluate pass statistics bounds based on target mode selected.
+        // Determine if this student should be included in the pass/fail math.
+        // "registered" (KMU rule) includes every enrolled student, scoring
+        // absentees as zero; "appeared" (standard) only evaluates students
+        // who actually attempted the selected exam(s).
+        if ($calc_basis === 'registered') {
+            $evaluate_student = true;
+        } else if ($is_combined) {
+            $evaluate_student = ($has_active_t || $has_active_skill);
+        } else {
+            $evaluate_student = ($has_theory ? $has_active_t : $has_active_skill);
+        }
+
         if ($is_combined) {
-            if ($has_active_t || $has_active_o) {
+            if ($evaluate_student) {
                 $t_max  = floatval($theory_item->grademax);
-                $t_pass = floatval($theory_item->gradepass) > 0 ? floatval($theory_item->gradepass) : $t_max * 0.50;
-                $o_max  = floatval($ospe_item->grademax);
-                $o_pass = floatval($ospe_item->gradepass) > 0 ? floatval($ospe_item->gradepass) : $o_max * 0.50;
+                $t_pass = floatval($theory_item->gradepass) > 0
+                    ? floatval($theory_item->gradepass) : $t_max * 0.50;
+                $skill_max  = floatval($skill_item->grademax);
+                $skill_pass = floatval($skill_item->gradepass) > 0
+                    ? floatval($skill_item->gradepass) : $skill_max * 0.50;
 
-                if ($ts >= $t_pass && $os >= $o_pass) {
+                if ($ts >= $t_pass && $skillscore >= $skill_pass) {
                     $passed_count++;
                 } else {
                     $failed_count++;
                 }
-                $combined_score = $ts + $os;
+                $combined_score = $ts + $skillscore;
                 $leaderboard_stack[$uid] = $combined_score;
 
-                // Grade band: percentage of combined max.
-                $combined_max = $t_max + $o_max;
+                $combined_max = $t_max + $skill_max;
                 $pct = ($combined_max > 0) ? ($combined_score / $combined_max) * 100 : 0;
-                if ($pct >= 80) {
+                if ($pct >= $band_a_min) {
                     $bands['A'][] = $uid;
-                } else if ($pct >= 60) {
+                } else if ($pct >= $band_b_min) {
                     $bands['B'][] = $uid;
-                } else if ($pct >= 50) {
+                } else if ($pct >= $band_c_min) {
                     $bands['C'][] = $uid;
                 } else {
                     $bands['D'][] = $uid;
                 }
             }
         } else {
-            $active_score = $has_theory ? $ts : $os;
-            $active_item  = $has_theory ? $theory_item : $ospe_item;
+            $active_score = $has_theory ? $ts : $skillscore;
+            $active_item  = $has_theory ? $theory_item : $skill_item;
 
-            if ($active_score > 0) {
+            if ($evaluate_student) {
                 $pass_line = floatval($active_item->gradepass) > 0
                     ? floatval($active_item->gradepass)
                     : floatval($active_item->grademax) * 0.50;
+
                 if ($active_score >= $pass_line) {
                     $passed_count++;
                 } else {
@@ -412,14 +595,13 @@ if ($courseid > 0 && $any_exam_selected) {
                 }
                 $leaderboard_stack[$uid] = $active_score;
 
-                // Grade band: percentage of single exam max.
                 $pct = (floatval($active_item->grademax) > 0)
                     ? ($active_score / floatval($active_item->grademax)) * 100 : 0;
-                if ($pct >= 80) {
+                if ($pct >= $band_a_min) {
                     $bands['A'][] = $uid;
-                } else if ($pct >= 60) {
+                } else if ($pct >= $band_b_min) {
                     $bands['B'][] = $uid;
-                } else if ($pct >= 50) {
+                } else if ($pct >= $band_c_min) {
                     $bands['C'][] = $uid;
                 } else {
                     $bands['D'][] = $uid;
@@ -427,335 +609,291 @@ if ($courseid > 0 && $any_exam_selected) {
             }
         }
     }
-    
-    // Resolve dynamic presentation metrics percentages
+
     $evaluated_pool_total = $passed_count + $failed_count;
-    if ($evaluated_pool_total <= 0) { $evaluated_pool_total = 1; }
+    if ($evaluated_pool_total <= 0) {
+        $evaluated_pool_total = 1;
+    }
     $pass_percent = round(($passed_count / $evaluated_pool_total) * 100, 1);
     $fail_percent = round(($failed_count / $evaluated_pool_total) * 100, 1);
-    
-    // Action Controls Row
-    echo '<div class="d-flex justify-content-end mb-3 re-no-print">';
-    echo '  <button onclick="window.print()" class="btn btn-outline-info btn-sm mr-2">'
-        . '<i class="fa fa-print mr-1"></i> Print Report</button>';
 
-    // Build base URL params for all export links.
+    // -------------------------------------------------------------------------
+    // Action controls row: Print + CSV dropdown
+    // Uses data-action attributes picked up by amd/src/dashboard.js.
+    // -------------------------------------------------------------------------
     $base_export_params = array(
         'courseid'      => $courseid,
         'quizid_theory' => $quizid_theory,
-        'quizid_ospe'   => $quizid_ospe,
+        'quizid_skill'   => $quizid_skill,
+        'calc_basis'    => $calc_basis,
     );
 
-    $url_failed       = new moodle_url('/report/examstats/index.php',
+    $url_failed        = new moodle_url('/report/examstats/index.php',
         array_merge($base_export_params, array('export' => 'failedcsv')));
     $url_highachievers = new moodle_url('/report/examstats/index.php',
         array_merge($base_export_params, array('export' => 'highachievers')));
-    $url_satisfactory = new moodle_url('/report/examstats/index.php',
+    $url_satisfactory  = new moodle_url('/report/examstats/index.php',
         array_merge($base_export_params, array('export' => 'satisfactory')));
-    $url_borderline   = new moodle_url('/report/examstats/index.php',
+    $url_borderline    = new moodle_url('/report/examstats/index.php',
         array_merge($base_export_params, array('export' => 'borderline')));
-    $url_complete     = new moodle_url('/report/examstats/index.php',
+    $url_complete      = new moodle_url('/report/examstats/index.php',
         array_merge($base_export_params, array('export' => 'completeresult')));
 
-    echo '  <style>
-    .epr-dropdown { position:relative; display:inline-block; }
-    .epr-dropdown-menu {
-        display:none; position:absolute; right:0; top:100%; z-index:9999;
-        background:#fff; border:1px solid rgba(0,0,0,.15); border-radius:6px;
-        box-shadow:0 6px 20px rgba(0,0,0,0.15); min-width:240px; margin-top:4px;
-    }
-    .epr-dropdown-menu.show { display:block; }
-    .epr-dropdown-menu a {
-        display:block; padding:9px 16px; color:#343a40; text-decoration:none;
-        font-size:.88rem; border-bottom:1px solid #f1f1f1;
-    }
-    .epr-dropdown-menu a:last-child { border-bottom:none; }
-    .epr-dropdown-menu a:hover { background:#f8f9fa; color:#000; }
-    .epr-dropdown-header {
-        padding:8px 16px 4px; font-size:.72rem; font-weight:700;
-        text-transform:uppercase; letter-spacing:.05em; color:#6c757d;
-    }
-    .epr-dropdown-divider { border-top:2px solid #e9ecef; margin:4px 0; }
-    </style>';
+    echo $OUTPUT->render_from_template('report_examstats/toolbar', array(
+        'urlhighachievers'    => $url_highachievers->out(false),
+        'urlsatisfactory'     => $url_satisfactory->out(false),
+        'urlborderline'       => $url_borderline->out(false),
+        'urlfailed'           => $url_failed->out(false),
+        'urlcomplete'         => $url_complete->out(false),
+        'bandamin'            => $band_a_min,
+        'bandbmin'            => $band_b_min,
+        'bandbmax'            => $band_a_min - 1,
+        'bandcmin'            => $band_c_min,
+        'bandcmax'            => $band_b_min - 1,
+        'strprintreport'      => get_string('printreport',       'report_examstats'),
+        'strdownloadcsv'      => get_string('downloadcsv',       'report_examstats'),
+        'strbyperformanceband' => get_string('byperformanceband', 'report_examstats'),
+        'strhighachievers'    => $band_a_label,
+        'strsatisfactory'     => $band_b_label,
+        'strborderline'       => $band_c_label,
+        'strfailedstudents'   => $band_d_label,
+        'strcompleteresult'   => get_string('completeresult',    'report_examstats'),
+    ));
 
-    echo '  <div class="epr-dropdown re-no-print">
-      <button type="button" onclick="
-        var m=document.getElementById(\'epr-csv-menu\');
-        m.classList.toggle(\'show\');
-        document.addEventListener(\'click\', function handler(e){
-            if(!e.target.closest(\'.epr-dropdown\')){
-                m.classList.remove(\'show\');
-                document.removeEventListener(\'click\', handler);
-            }
-        });
-      " class="btn btn-danger btn-sm">
-        <i class="fa fa-download mr-1"></i> Download CSV &nbsp;&#9660;
-      </button>
-      <div class="epr-dropdown-menu" id="epr-csv-menu">
-        <div class="epr-dropdown-header">By Performance Band</div>
-        <a href="' . $url_highachievers->out(false) . '">
-          <i class="fa fa-star text-warning mr-1"></i> High Achievers (&ge; 80%)</a>
-        <a href="' . $url_satisfactory->out(false) . '">
-          <i class="fa fa-thumbs-up text-success mr-1"></i> Satisfactory (60&ndash;79%)</a>
-        <a href="' . $url_borderline->out(false) . '">
-          <i class="fa fa-exclamation-circle text-warning mr-1"></i> Borderline (50&ndash;59%)</a>
-        <a href="' . $url_failed->out(false) . '">
-          <i class="fa fa-times-circle text-danger mr-1"></i> Failed Students (&lt; 50%)</a>
-        <div class="epr-dropdown-divider"></div>
-        <a href="' . $url_complete->out(false) . '">
-          <i class="fa fa-table mr-1"></i> Complete Result (All Students)</a>
-      </div>
-    </div>';
-    echo '</div>';
-    
+    // -------------------------------------------------------------------------
+    // Analytics dashboard card — wraps all template output below
+    // -------------------------------------------------------------------------
     echo '<div id="re-analytics-dashboard" class="card border-0 shadow-sm">';
     echo '  <div class="card-body p-4">';
-    
-    // Professional Header Block: Always rendered contextually at the top of the analytics viewport
-    echo '    <div class="mb-4 text-left border-bottom pb-3">';
-    echo '      <h3 class="font-weight-bold text-dark mb-2">Exam Performance Report</h3>';
-    echo '      <div class="font-weight-bold" style="font-size: 1.05rem; line-height: 1.6; color: #c0392b;">Course: <span class="text-dark font-weight-normal">' . s($course_record->fullname) . '</span></div>';
-    echo '      <div class="font-weight-bold" style="font-size: 1.05rem; line-height: 1.6; color: #c0392b;">Exam Target: <span class="text-dark font-weight-normal">' . s($printed_exam_titles) . '</span></div>';
-    echo '    </div>';
-    
-    // Attendance Calculation Blocks
-    // KPI Cards Row
-    // Shared inner-card style: fixed min-height + flexbox so all cards are the same height
-    $kpi_inner = 'display:flex;flex-direction:column;justify-content:center;align-items:center;'
-               . 'border-radius:12px;padding:22px 14px;text-align:center;color:#fff;min-height:130px;'
-               . 'box-shadow:0 4px 15px rgba(0,0,0,0.18);';
-    $kpi_label = 'font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;opacity:.9;margin-bottom:6px;font-weight:600;';
-    $kpi_val   = 'font-size:1.75rem;font-weight:700;line-height:1.1;margin:0;';
-    $kpi_sub   = 'font-size:.78rem;opacity:.9;margin-top:6px;';
-    $kpi_sub2  = 'font-size:.75rem;opacity:.95;margin-top:5px;font-weight:500;';
 
+    $display_mode_text = ($calc_basis === 'registered')
+        ? get_string('calcbasisregistered', 'report_examstats')
+        : get_string('calcbasisappeared', 'report_examstats');
+
+    echo $OUTPUT->render_from_template('report_examstats/reportheader', array(
+        'strpluginname'  => get_string('pluginname',  'report_examstats'),
+        'strcourse'      => get_string('course',      'report_examstats'),
+        'coursefullname' => $course_record->fullname,
+        'strexamtarget'  => get_string('examtarget',  'report_examstats'),
+        'examtitles'     => $printed_exam_titles,
+        'strbasis'       => get_string('basis',       'report_examstats'),
+        'basistext'      => $display_mode_text,
+    ));
+
+    // -------------------------------------------------------------------------
+    // KPI Cards template data
+    // -------------------------------------------------------------------------
     if ($is_combined) {
         $attend_pct   = round(($p_both_count / $total_enrolled) * 100, 1);
         $absent_count = $total_enrolled - $p_both_count;
-        $t_cutoff_val = floatval($theory_item->gradepass) > 0 ? floatval($theory_item->gradepass) : floatval($theory_item->grademax)*0.50;
-        $o_cutoff_val = floatval($ospe_item->gradepass)   > 0 ? floatval($ospe_item->gradepass)   : floatval($ospe_item->grademax)*0.50;
+        $t_cutoff_val = floatval($theory_item->gradepass) > 0
+            ? floatval($theory_item->gradepass) : floatval($theory_item->grademax) * 0.50;
+        $skill_cutoff_val = floatval($skill_item->gradepass) > 0
+            ? floatval($skill_item->gradepass) : floatval($skill_item->grademax) * 0.50;
 
-        // Card 1 — Attendance (blue)
-        $attendance_card = '<div class="col-6 col-md-3 mb-3">
-          <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#1a6dff,#00c6ff);">
-            <div style="' . $kpi_label . '">Attendance</div>
-            <div style="' . $kpi_val . '">' . $attend_pct . '%</div>
-            <div style="' . $kpi_sub . '">' . $p_both_count . ' / ' . $total_enrolled . ' present in both</div>
-            <div style="' . $kpi_sub2 . '">P in Theory: <strong>' . $p_theory_count . '</strong> &nbsp;|&nbsp; P in OSPE: <strong>' . $p_ospe_count . '</strong></div>
-          </div>
-        </div>';
-
-        // Card 2 — Absent (slate)
-        $absent_card = '<div class="col-6 col-md-3 mb-3">
-          <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#485563,#29323c);">
-            <div style="' . $kpi_label . '">Absent</div>
-            <div style="' . $kpi_val . '">' . $absent_count . '</div>
-            <div style="' . $kpi_sub . '">did not attempt</div>
-            <div style="' . $kpi_sub2 . '">&nbsp;</div>
-          </div>
-        </div>';
-
-        // Cards 3 & 4 — Theory cutoff (purple→pink) | OSPE cutoff (green)
-        $cutoff_cards =
-          '<div class="col-6 col-md-3 mb-3">
-            <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#7b2ff7,#e83e8c);">
-              <div style="' . $kpi_label . '">Theory Cutoff</div>
-              <div style="' . $kpi_val . '">' . $t_cutoff_val . '</div>
-              <div style="' . $kpi_sub . '">out of ' . floatval($theory_item->grademax) . '</div>
-              <div style="' . $kpi_sub2 . '">&nbsp;</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3 mb-3">
-            <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;">
-              <div style="' . $kpi_label . '">OSPE Cutoff</div>
-              <div style="' . $kpi_val . 'color:#fff;">' . $o_cutoff_val . '</div>
-              <div style="' . $kpi_sub . '">out of ' . floatval($ospe_item->grademax) . '</div>
-              <div style="' . $kpi_sub2 . '">&nbsp;</div>
-            </div>
-          </div>';
-
+        $kpi_data = array(
+            'iscombined'      => true,
+            'attendpct'       => $attend_pct,
+            'presentcount'    => $p_both_count,
+            'totalenrolled'   => $total_enrolled,
+            'presentlabel'    => get_string('presentinboth', 'report_examstats'),
+            'ptheorycount'    => $p_theory_count,
+            'pskillcount'     => $p_skill_count,
+            'absentcount'     => $absent_count,
+            'theorycutoffval' => $t_cutoff_val,
+            'theorymax'       => floatval($theory_item->grademax),
+            'skillcutoffval'  => $skill_cutoff_val,
+            'skillmax'        => floatval($skill_item->grademax),
+        );
     } else {
-        $single_present = $has_theory ? $p_theory_count : $p_ospe_count;
+        $single_present = $has_theory ? $p_theory_count : $p_skill_count;
         $attend_pct     = round(($single_present / $total_enrolled) * 100, 1);
         $absent_count   = $total_enrolled - $single_present;
-        $act_item       = $has_theory ? $theory_item : $ospe_item;
-        $act_cutoff     = floatval($act_item->gradepass) > 0 ? floatval($act_item->gradepass) : floatval($act_item->grademax)*0.50;
+        $act_item       = $has_theory ? $theory_item : $skill_item;
+        $act_cutoff     = floatval($act_item->gradepass) > 0
+            ? floatval($act_item->gradepass) : floatval($act_item->grademax) * 0.50;
 
-        // Card 1 — Attendance (blue)
-        $attendance_card = '<div class="col-6 col-md-3 mb-3">
-          <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#1a6dff,#00c6ff);">
-            <div style="' . $kpi_label . '">Attendance</div>
-            <div style="' . $kpi_val . '">' . $attend_pct . '%</div>
-            <div style="' . $kpi_sub . '">' . $single_present . ' present out of ' . $total_enrolled . '</div>
-            <div style="' . $kpi_sub2 . '">&nbsp;</div>
-          </div>
-        </div>';
-
-        // Card 2 — Absent (slate)
-        $absent_card = '<div class="col-6 col-md-3 mb-3">
-          <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#485563,#29323c);">
-            <div style="' . $kpi_label . '">Absent</div>
-            <div style="' . $kpi_val . '">' . $absent_count . '</div>
-            <div style="' . $kpi_sub . '">did not attempt</div>
-            <div style="' . $kpi_sub2 . '">&nbsp;</div>
-          </div>
-        </div>';
-
-        // Cards 3 & 4 — Cutoff (purple→pink) | Active Mode (green)
-        $cutoff_cards =
-          '<div class="col-6 col-md-3 mb-3">
-            <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#7b2ff7,#e83e8c);">
-              <div style="' . $kpi_label . '">Passing Cutoff</div>
-              <div style="' . $kpi_val . '">' . $act_cutoff . '</div>
-              <div style="' . $kpi_sub . '">out of ' . floatval($act_item->grademax) . '</div>
-              <div style="' . $kpi_sub2 . '">&nbsp;</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3 mb-3">
-            <div style="' . $kpi_inner . 'background:linear-gradient(135deg,#11998e,#38ef7d);">
-              <div style="' . $kpi_label . '">Active Mode</div>
-              <div style="' . $kpi_val . '">' . ($has_theory ? 'Single Theory' : 'Single OSPE') . '</div>
-              <div style="' . $kpi_sub . '">&nbsp;</div>
-              <div style="' . $kpi_sub2 . '">&nbsp;</div>
-            </div>
-          </div>';
+        $kpi_data = array(
+            'iscombined'      => false,
+            'attendpct'       => $attend_pct,
+            'presentcount'    => $single_present,
+            'totalenrolled'   => $total_enrolled,
+            'presentlabel'    => get_string('presentoutof', 'report_examstats'),
+            'absentcount'     => $absent_count,
+            'activecutoffval' => $act_cutoff,
+            'activemax'       => floatval($act_item->grademax),
+            'activemodelabel' => $has_theory
+                ? get_string('singletheory', 'report_examstats')
+                : get_string('singleskill',  'report_examstats'),
+        );
     }
 
-    echo '    <div class="row mb-4">';
-    echo $attendance_card;
-    echo $absent_card;
-    echo $cutoff_cards;
-    echo '    </div>'; // end KPI row
-    echo '    <hr class="my-4">';
-    
-    // Metrics Progress Bars
-    echo '    <div class="mb-4">';
-    echo '      <div class="d-flex justify-content-between mb-1"><span><i class="fa fa-check-circle text-success mr-1"></i> <strong>Passed (' . $passed_count . ' Students)</strong></span><span class="text-success font-weight-bold">' . $pass_percent . '%</span></div>';
-    echo '      <div class="progress" style="height: 24px; border-radius: 4px;">';
-    echo '        <div class="progress-bar bg-success" style="width: ' . $pass_percent . '%"></div>';
-    echo '      </div>';
-    echo '    </div>';
-    
-    echo '    <div class="mb-4">';
-    echo '      <div class="d-flex justify-content-between mb-1"><span><i class="fa fa-times-circle text-danger mr-1"></i> <strong>Failed (' . $failed_count . ' Students)</strong></span><span class="text-danger font-weight-bold">' . $fail_percent . '%</span></div>';
-    echo '      <div class="progress" style="height: 24px; border-radius: 4px;">';
-    echo '        <div class="progress-bar bg-danger" style="width: ' . $fail_percent . '%"></div>';
-    echo '      </div>';
-    echo '    </div>';
+    // Shared KPI string keys.
+    $kpi_data['strattendance']   = get_string('attendance',    'report_examstats');
+    $kpi_data['strabsent']       = get_string('absent',        'report_examstats');
+    $kpi_data['strdidnotattempt'] = get_string('didnotattempt', 'report_examstats');
+    $kpi_data['strtheorycutoff'] = get_string('theorycutoff',  'report_examstats');
+    $kpi_data['strskillcutoff']  = get_string('skillcutoff',   'report_examstats');
+    $kpi_data['strpassingcutoff'] = get_string('passingcutoff', 'report_examstats');
+    $kpi_data['stractivemode']   = get_string('activemode',    'report_examstats');
+    $kpi_data['stroutof']        = get_string('outof',         'report_examstats');
 
-    // Grade Band Distribution Table.
+    echo $OUTPUT->render_from_template('report_examstats/kpicards', $kpi_data);
+
+    // -------------------------------------------------------------------------
+    // Band Distribution template data
+    // -------------------------------------------------------------------------
     $total_graded = count($bands['A']) + count($bands['B']) + count($bands['C']) + count($bands['D']);
     $total_graded = ($total_graded > 0) ? $total_graded : 1;
-    echo '    <hr class="my-4">';
-    echo '    <h5 class="mb-3 font-weight-bold text-left" style="color: #c0392b;">'
-        . '<i class="fa fa-bar-chart mr-2"></i>Performance Band Distribution</h5>';
-    echo '    <div class="table-responsive mb-2">';
-    echo '      <table class="table table-bordered m-0 text-center">';
-    echo '        <thead class="thead-dark">';
-    echo '          <tr><th>Band</th><th>Descriptor</th><th>Score Range</th>'
-        . '<th>Students</th><th>% of Graded</th></tr>';
-    echo '        </thead>';
-    echo '        <tbody>';
-    echo '          <tr style="background:#d4edda;">'
-        . '<td><strong>A</strong></td>'
-        . '<td><strong>High Achiever</strong></td>'
-        . '<td>≥ 80%</td>'
-        . '<td class="font-weight-bold">' . count($bands['A']) . '</td>'
-        . '<td>' . round(count($bands['A']) / $total_graded * 100, 1) . '%</td></tr>';
-    echo '          <tr style="background:#d1ecf1;">'
-        . '<td><strong>B</strong></td>'
-        . '<td><strong>Satisfactory</strong></td>'
-        . '<td>60 – 79%</td>'
-        . '<td class="font-weight-bold">' . count($bands['B']) . '</td>'
-        . '<td>' . round(count($bands['B']) / $total_graded * 100, 1) . '%</td></tr>';
-    echo '          <tr style="background:#fff3cd;">'
-        . '<td><strong>C</strong></td>'
-        . '<td><strong>Borderline</strong></td>'
-        . '<td>50 – 59%</td>'
-        . '<td class="font-weight-bold">' . count($bands['C']) . '</td>'
-        . '<td>' . round(count($bands['C']) / $total_graded * 100, 1) . '%</td></tr>';
-    echo '          <tr style="background:#f8d7da;">'
-        . '<td><strong>D</strong></td>'
-        . '<td><strong>Fail</strong></td>'
-        . '<td>&lt; 50%</td>'
-        . '<td class="font-weight-bold">' . count($bands['D']) . '</td>'
-        . '<td>' . round(count($bands['D']) / $total_graded * 100, 1) . '%</td></tr>';
-    echo '        </tbody>';
-    echo '      </table>';
-    echo '    </div>';
-    
-    // Failure Diagnostics Component (Combined Exams Only)
+
+    $band_data = array(
+        'strpassed'      => get_string('passed',      'report_examstats'),
+        'strfailed'      => get_string('failed',      'report_examstats'),
+        'strstudents'    => get_string('students',    'report_examstats'),
+        'passedcount'    => $passed_count,
+        'failedcount'    => $failed_count,
+        'passpercent'    => $pass_percent,
+        'failpercent'    => $fail_percent,
+        'strband'                      => get_string('band',                     'report_examstats'),
+        'strdescriptor'                => get_string('descriptor',               'report_examstats'),
+        'strscorerange'                => get_string('scorerange',               'report_examstats'),
+        'strpctgraded'                 => get_string('pctgraded',                'report_examstats'),
+        'strperformancebanddistribution' => get_string('performancebanddistribution', 'report_examstats'),
+        'bands' => array(
+            array(
+                'letter'     => 'A',
+                'rowstyle'   => 'background:#d4edda;',
+                'descriptor' => $band_a_label,
+                'scorerange' => '&ge; ' . $band_a_min . '%',
+                'count'      => count($bands['A']),
+                'percent'    => round(count($bands['A']) / $total_graded * 100, 1),
+            ),
+            array(
+                'letter'     => 'B',
+                'rowstyle'   => 'background:#d1ecf1;',
+                'descriptor' => $band_b_label,
+                'scorerange' => $band_b_min . '% &ndash; &lt; ' . $band_a_min . '%',
+                'count'      => count($bands['B']),
+                'percent'    => round(count($bands['B']) / $total_graded * 100, 1),
+            ),
+            array(
+                'letter'     => 'C',
+                'rowstyle'   => 'background:#fff3cd;',
+                'descriptor' => $band_c_label,
+                'scorerange' => $band_c_min . '% &ndash; &lt; ' . $band_b_min . '%',
+                'count'      => count($bands['C']),
+                'percent'    => round(count($bands['C']) / $total_graded * 100, 1),
+            ),
+            array(
+                'letter'     => 'D',
+                'rowstyle'   => 'background:#f8d7da;',
+                'descriptor' => $band_d_label,
+                'scorerange' => '&lt; ' . $band_c_min . '%',
+                'count'      => count($bands['D']),
+                'percent'    => round(count($bands['D']) / $total_graded * 100, 1),
+            ),
+        ),
+    );
+
+    echo $OUTPUT->render_from_template('report_examstats/banddistribution', $band_data);
+
+    // -------------------------------------------------------------------------
+    // Failure Breakdown template data (combined mode only)
+    // -------------------------------------------------------------------------
     if ($is_combined) {
-        $fail_theory_only = 0; $fail_ospe_only = 0; $fail_both = 0;
-        $t_pass = floatval($theory_item->gradepass) > 0 ? floatval($theory_item->gradepass) : floatval($theory_item->grademax) * 0.50;
-        $o_pass = floatval($ospe_item->gradepass) > 0 ? floatval($ospe_item->gradepass) : floatval($ospe_item->grademax) * 0.50;
-        
+        $fail_theory_only = 0;
+        $fail_skill_only   = 0;
+        $fail_both        = 0;
+
+        $t_pass = floatval($theory_item->gradepass) > 0
+            ? floatval($theory_item->gradepass) : floatval($theory_item->grademax) * 0.50;
+        $skill_pass = floatval($skill_item->gradepass) > 0
+            ? floatval($skill_item->gradepass) : floatval($skill_item->grademax) * 0.50;
+
         foreach ($enrolled_users as $user) {
             $uid = $user->id;
-            $ts = (isset($t_grades[$uid]) && floatval($t_grades[$uid]) > 0) ? floatval($t_grades[$uid]) : 0;
-            $os = (isset($o_grades[$uid]) && floatval($o_grades[$uid]) > 0) ? floatval($o_grades[$uid]) : 0;
-            
-            if ($ts > 0 || $os > 0) {
+            $ts  = (isset($t_grades[$uid]) && floatval($t_grades[$uid]) > 0)
+                ? floatval($t_grades[$uid]) : 0;
+            $skillscore  = (isset($skill_grades[$uid]) && floatval($skill_grades[$uid]) > 0)
+                ? floatval($skill_grades[$uid]) : 0;
+
+            // Same eligibility rule as the main pass/fail loop: "registered"
+            // (KMU rule) includes every enrolled student, scoring absentees
+            // as zero on both exams; "appeared" (standard) only considers
+            // students who attempted at least one of the two exams.
+            $breakdown_evaluate = ($calc_basis === 'registered')
+                ? true
+                : ($ts > 0 || $skillscore > 0);
+
+            if ($breakdown_evaluate) {
                 $pass_t = ($ts >= $t_pass);
-                $pass_o = ($os >= $o_pass);
+                $pass_o = ($skillscore >= $skill_pass);
                 if (!$pass_t && $pass_o) {
                     $fail_theory_only++;
                 } else if ($pass_t && !$pass_o) {
-                    $fail_ospe_only++;
+                    $fail_skill_only++;
                 } else if (!$pass_t && !$pass_o) {
                     $fail_both++;
                 }
             }
         }
-        echo '    <div class="mt-4">';
-        echo '      <h5 class="mb-3 font-weight-bold text-left" style="color: #c0392b;"><i class="fa fa-stethoscope mr-2"></i>Failure Breakdown Diagnostics</h5>';
-        echo '      <div class="table-responsive">';
-        echo '        <table class="table table-bordered table-striped m-0 text-left">';
-        echo '          <thead class="thead-dark"><tr><th>Point of Failure</th><th class="text-center">Student Count</th></tr></thead>';
-        echo '          <tbody>';
-        echo '            <tr><td><strong>Failed Theory Only</strong> <span class="text-muted small">(Passed OSPE but missed Theory cutoff)</span></td><td class="text-center h5 text-danger font-weight-bold">' . $fail_theory_only . '</td></tr>';
-        echo '            <tr><td><strong>Failed OSPE Only</strong> <span class="text-muted small">(Passed Theory but missed OSPE cutoff)</span></td><td class="text-center h5 text-danger font-weight-bold">' . $fail_ospe_only . '</td></tr>';
-        echo '            <tr><td><strong>Failed Both</strong> <span class="text-muted small">(Missed cutoffs on both exams)</span></td><td class="text-center h5 text-danger font-weight-bold">' . $fail_both . '</td></tr>';
-        echo '          </tbody>';
-        echo '        </table>';
-        echo '      </div>';
-        echo '    </div>';
+
+        echo $OUTPUT->render_from_template('report_examstats/failurebreakdown', array(
+            'strfailurebreakdown'         => get_string('failurebreakdown',         'report_examstats'),
+            'strpointoffailure'           => get_string('pointoffailure',           'report_examstats'),
+            'strstudentcount'             => get_string('studentcount',             'report_examstats'),
+            'strfailedtheoryonly'         => get_string('failedtheoryonly',         'report_examstats'),
+            'strfailedskillonly'          => get_string('failedskillonly',          'report_examstats'),
+            'strfailedboth'               => get_string('failedboth',               'report_examstats'),
+            'strpassedskillbutmissedtheory' => get_string('passedskillbutmissedtheory', 'report_examstats'),
+            'strpassedtheorybutmissedskill' => get_string('passedtheorybutmissedskill', 'report_examstats'),
+            'strmissedbothcutoffs'        => get_string('missedbothcutoffs',        'report_examstats'),
+            'failtheoryonly'              => $fail_theory_only,
+            'failskillonly'               => $fail_skill_only,
+            'failboth'                    => $fail_both,
+        ));
     }
-    
-    // Top 5 High-Performers Leaderboard
+
+    // -------------------------------------------------------------------------
+    // Leaderboard template data
+    // -------------------------------------------------------------------------
     arsort($leaderboard_stack);
-    $top_five = array_slice($leaderboard_stack, 0, 5, true);
-    
-    echo '    <div class="mt-5">';
-    echo '      <h5 class="mb-3 font-weight-bold text-dark text-left"><i class="fa fa-star text-warning mr-2"></i>Top 5 Best Performing Students</h5>';
-    echo '      <div class="d-flex flex-wrap justify-content-center">';
-    
+    $top_five  = array_slice($leaderboard_stack, 0, 5, true);
+    $performers = array();
     $rank = 1;
+
     foreach ($top_five as $top_uid => $achieved_score) {
         if (isset($enrolled_users[$top_uid])) {
             $student_user = $enrolled_users[$top_uid];
-            $user_pic = $OUTPUT->user_picture($student_user, array('size' => 50, 'link' => false, 'class' => 're-leaderboard-img mb-2'));
-            
-            echo '  <div class="mb-3 px-2 text-center" style="flex: 1; min-width: 175px; max-width: 210px;">';
-            echo '    <div class="card border shadow-sm p-3 leaderboard-card">';
-            echo '      <div class="badge badge-warning text-dark font-weight-bold mb-2 position-absolute" style="top:10px; left:10px;">Rank #' . $rank . '</div>';
-            echo '      <div class="mt-2">' . $user_pic . '</div>';
-            echo '      <div class="font-weight-bold text-dark text-truncate mt-1">' . s($student_user->firstname) . ' ' . s($student_user->lastname) . '</div>';
-            echo '      <div class="h5 font-weight-bold text-success mt-1 mb-0">' . $achieved_score . '</div>';
-            echo '      <small class="text-muted">' . ($is_combined ? 'Combined Total' : 'Points') . '</small>';
-            echo '    </div>';
-            echo '  </div>';
+            $performers[] = array(
+                'rank'           => $rank,
+                'userpictureurl' => $OUTPUT->user_picture(
+                    $student_user,
+                    array('size' => 50, 'link' => false, 'class' => 're-leaderboard-img mb-2')
+                ),
+                'fullname' => s($student_user->firstname) . ' ' . s($student_user->lastname),
+                'score'    => $achieved_score,
+            );
             $rank++;
         }
     }
-    echo '      </div>';
-    echo '    </div>';
-    
-    echo '  </div>';
-    echo '</div>';
+
+    echo $OUTPUT->render_from_template('report_examstats/leaderboard', array(
+        'strtopfiveperformers' => get_string('topfiveperformers', 'report_examstats'),
+        'strscoresuffix'       => $is_combined
+            ? get_string('combinedtotal', 'report_examstats')
+            : get_string('points',        'report_examstats'),
+        'performers' => $performers,
+    ));
+
+    echo '  </div>'; // .card-body
+    echo '</div>';   // #re-analytics-dashboard
+
 } else {
-    echo '<div class="alert alert-info re-no-print">Please select an exam configuration and click "Apply Filters" to load the matrix dashboard.</div>';
+    echo $OUTPUT->render_from_template('report_examstats/nodata', array(
+        'strnodatadefined' => get_string('nodatadefined', 'report_examstats'),
+    ));
 }
 
-echo '</div>'; // End .report-examstats wrapper.
+echo '</div>'; // .report-examstats
 echo $OUTPUT->footer();

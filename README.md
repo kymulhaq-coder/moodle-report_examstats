@@ -1,40 +1,86 @@
 # Exam Performance Report #
 
-A Moodle admin report plugin for medical colleges that provides detailed
-pass/fail analytics for Theory and OSPE/OSCE quiz assessments, with
-performance band distribution, failure diagnostics, and CSV exports.
+A Moodle report plugin that provides detailed pass/fail analytics for
+Theory and Skill Exam quiz assessments, with performance band
+distribution, failure diagnostics, and CSV exports.
 
 ## Features ##
 
 - **Flexible exam selection** — analyse a single Theory exam, a single
-  OSPE/OSCE exam, or both combined in one report
-- **Smart quiz filtering** — Theory dropdown shows only quizzes named
-  with "Theory"; OSPE dropdown shows only "OSPE" or "OSCE" quizzes
-- **KPI summary cards** — Attendance %, Absent count, passing cutoffs
-  displayed as colour-coded cards
+  Skill Exam, or both combined in one report
+- **Configurable quiz filtering** — the Theory and Skill Exam dropdowns
+  only list quizzes whose name matches admin-configurable patterns (see
+  [Admin Settings](#admin-settings) below). The Skill Exam pattern
+  accepts a comma-separated list (e.g. `Skill, OSCE, OSPE, Practical`)
+  — a quiz matches if its name contains any one of the listed terms, so
+  the report adapts to whatever naming convention your institution uses
+  (Skill, Practical, OSCE, OSPE, or any custom label).
+- **Calculation Basis** — choose how the pass/fail cohort is defined:
+  - **Appeared Cohort (Standard)** — only students who attempted at
+    least one of the selected exam(s) are included in the pass/fail
+    math and band distribution.
+  - **Total Cohort (KMU Rule)** — every enrolled student is included;
+    anyone who didn't attempt an exam is scored zero and counted as
+    failed. Useful for institutions that require absentees to be
+    reflected in overall pass/fail statistics.
+- **KPI summary cards** — Attendance %, Absent count, and passing
+  cutoff(s) displayed as colour-coded cards, plus an Active Mode
+  indicator showing whether the report is running in Single Theory,
+  Single Skill, or Combined mode
 - **Pass/Fail progress bars** — instant visual overview of results
 - **Performance Band Distribution table** — students classified into
-  four bands based on percentage of maximum marks:
+  four bands based on percentage of maximum marks. Both the percentage
+  thresholds and the band names are fully configurable by the admin
+  (see [Admin Settings](#admin-settings)); the defaults are:
   - A — High Achiever (≥ 80%)
-  - B — Satisfactory (60–79%)
-  - C — Borderline (50–59%)
+  - B — Satisfactory (60% – < 80%)
+  - C — Borderline (50% – < 60%)
   - D — Fail (< 50%)
 - **Failure Breakdown Diagnostics** — in combined mode, shows how many
-  students failed Theory only, OSPE only, or both components
-- **Top 5 Leaderboard** — best performing students with profile pictures
-- **CSV Export Dropdown** — download results by band (High Achievers,
-  Satisfactory, Borderline, Failed) or as a Complete Result; columns
-  include per-component scores, remarks, grand total, % of max,
-  descriptor, and overall pass/fail status
-- **Print-ready layout** — clean print stylesheet hides UI controls
+  students failed Theory only, Skill Exam only, or both components
+- **Top 5 Leaderboard** — best performing students with profile
+  pictures, ranked by combined/active score
+- **CSV Export Dropdown** — download results filtered by performance
+  band, or as a Complete Result sheet. The band names and downloaded
+  filenames automatically follow whatever custom band labels the admin
+  has configured, so the CSV always stays in sync with the on-screen
+  table. Columns include per-component scores, remarks, grand total, %
+  of max, descriptor, and overall pass/fail status — all fully
+  localized via Moodle's string API.
+- **Print-ready layout** — a dedicated print stylesheet hides UI
+  controls (filters, buttons, dropdowns) and forces a clean white
+  background regardless of the site theme, so the report prints/exports
+  to PDF cleanly even on dark-themed Moodle sites.
+
+## Admin Settings ##
+
+Configurable at **Site administration > Plugins > Report > Exam
+Performance Report**:
+
+- **Theory quiz name pattern** — text a quiz name must contain to
+  appear in the Theory Exam dropdown (default: `Theory`)
+- **Skill exam quiz name patterns** — comma-separated list of terms; a
+  quiz matches if its name contains any one of them (default:
+  `Skill, OSCE, OSPE, Practical`)
+- **Band A / B / C minimum %** — the percentage cutoffs for the top
+  three performance bands (defaults: 80 / 60 / 50). Band D is
+  automatically "anything below the Band C cutoff."
+- **Band A / B / C / D labels** — the descriptor text shown in the
+  Performance Band Distribution table and the CSV export dropdown
+  (defaults: High Achiever / Satisfactory / Borderline / Fail).
+  Rename Band D to something like "Poor Performance" or "Needs
+  Improvement" if preferred — no code changes required.
 
 ## Requirements ##
 
 - Moodle 4.5 or later (tested on Moodle 5.0)
-- Admin capability: `moodle/site:config`
-- Quizzes must have passing grade configured in the Moodle gradebook
-- Quiz names must contain the word "Theory" or "OSPE"/"OSCE" to appear
-  in the respective filter dropdowns
+- Capability: `report/examstats:view` (granted by default to Teacher,
+  Editing Teacher, and Manager roles; admins have it automatically)
+- Quizzes must have a passing grade configured in the Moodle gradebook
+- Quiz names must match the configured Theory/Skill Exam name patterns
+  to appear in the respective filter dropdowns (see
+  [Admin Settings](#admin-settings) — both are fully configurable, not
+  hardcoded)
 
 ## Installing via uploaded ZIP file ##
 
@@ -61,13 +107,17 @@ Alternatively, run:
 
 ## Usage ##
 
-1. Go to **Site administration > Reports > Exam Performance Report**
+1. Go to **Course > More > Reports > Exam Performance Report** (or
+   **Site administration > Reports > Exam Performance Report** for
+   sitewide access)
 2. Select a **Course** from the dropdown — the page refreshes
    automatically
-3. Select a **Theory Exam** and/or **OSPE Exam** from the filtered
-   dropdowns
+3. Select a **Theory Exam** and/or **Skill Exam** from the filtered
+   dropdowns, and choose a **Calculation Basis** (Appeared or
+   Registered/KMU Rule)
 4. Click **Apply Filters** to load the performance dashboard
-5. Use the **Download CSV** dropdown to export results by band or as a
+5. Use the **Print Report** button for a clean printable/PDF view, or
+   the **Download CSV** dropdown to export results by band or as a
    complete result sheet
 
 ## License ##

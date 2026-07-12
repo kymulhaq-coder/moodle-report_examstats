@@ -1,0 +1,324 @@
+/* This file is part of Moodle - https://moodle.org/
+ *
+ * Moodle is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Moodle is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/**
+ * Styles for report_examstats.
+ *
+ * Consolidates the two inline <style> blocks that previously lived in
+ * index.php (layout/print rules + KPI card rules + CSV dropdown rules)
+ * into a single plugin stylesheet, auto-loaded by Moodle on every page.
+ *
+ * @package   report_examstats
+ * @copyright 2026 Khayam <kymulhaq@gmail.com>
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+/* ---------------------------------------------------------------------
+   Layout & labels
+   --------------------------------------------------------------------- */
+.report-examstats .re-label {
+    color: #343a40 !important;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   Filter form (icon-label grid style)
+   --------------------------------------------------------------------- */
+.report-examstats .re-filter-label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #5a6675 !important;
+    margin-bottom: 7px;
+    display: block;
+}
+
+.report-examstats .re-filter-input {
+    height: 42px !important;
+    border-radius: 8px !important;
+    border: 1px solid #dce1e7 !important;
+    background-color: #f8fafc !important;
+    color: #2d3748 !important;
+    font-size: 0.92rem !important;
+    padding: 0 12px !important;
+    transition: all 0.2s ease-in-out !important;
+    box-shadow: none !important;
+    width: 100%;
+}
+
+.report-examstats .re-filter-input:focus {
+    border-color: #1a6dff !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(26, 109, 255, 0.12) !important;
+}
+
+.report-examstats .re-filter-btn {
+    height: 42px !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.92rem !important;
+    background: #1a6dff !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(26, 109, 255, 0.2) !important;
+    transition: all 0.2s ease !important;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.report-examstats .re-filter-btn:hover {
+    background: #0056e0 !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 16px rgba(26, 109, 255, 0.28) !important;
+}
+
+.report-examstats .re-section-heading {
+    color: #c0392b;
+}
+
+/* ---------------------------------------------------------------------
+   Leaderboard
+   --------------------------------------------------------------------- */
+.report-examstats .re-leaderboard-img {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    border: 2px solid #fff;
+}
+
+.report-examstats .re-leaderboard-card {
+    background: #fff;
+    min-height: 170px;
+    border-radius: 8px;
+    position: relative;
+    transition: transform 0.2s;
+}
+
+.report-examstats .re-leaderboard-card:hover {
+    transform: translateY(-3px);
+}
+
+/* ---------------------------------------------------------------------
+   KPI summary cards
+   --------------------------------------------------------------------- */
+.report-examstats .re-kpi-inner {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-radius: 12px;
+    padding: 22px 14px;
+    text-align: center;
+    color: #fff;
+    min-height: 130px;
+    height: 100%;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.18);
+}
+
+.report-examstats .re-kpi-label {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    opacity: .9;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.report-examstats .re-kpi-val {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 0;
+}
+
+/*
+ * Modifier for KPI values holding a short phrase (e.g. "Single Theory
+ * Exam") instead of a number/percentage. The default .re-kpi-val
+ * font-size is tuned for short numeric values; at that size, a longer
+ * phrase wraps onto a second line and makes that card taller than its
+ * siblings. This keeps it to one line so all 4 cards stay equal height.
+ */
+.report-examstats .re-kpi-val-text {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.report-examstats .re-kpi-sub {
+    font-size: .78rem;
+    opacity: .9;
+    margin-top: 6px;
+}
+
+.report-examstats .re-kpi-sub2 {
+    font-size: .75rem;
+    opacity: .95;
+    margin-top: 5px;
+    font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------
+   CSV download dropdown
+   --------------------------------------------------------------------- */
+.report-examstats .epr-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.report-examstats .epr-dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, .15);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    min-width: 240px;
+    margin-top: 4px;
+}
+
+.report-examstats .epr-dropdown-menu.show {
+    display: block;
+}
+
+.report-examstats .epr-dropdown-menu a {
+    display: block;
+    padding: 9px 16px;
+    color: #343a40;
+    text-decoration: none;
+    font-size: .88rem;
+    border-bottom: 1px solid #f1f1f1;
+}
+
+.report-examstats .epr-dropdown-menu a:last-child {
+    border-bottom: none;
+}
+
+.report-examstats .epr-dropdown-menu a:hover {
+    background: #f8f9fa;
+    color: #000;
+}
+
+.report-examstats .epr-dropdown-header {
+    padding: 8px 16px 4px;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #6c757d;
+}
+
+.report-examstats .epr-dropdown-divider {
+    border-top: 2px solid #e9ecef;
+    margin: 4px 0;
+}
+
+/* ---------------------------------------------------------------------
+   Print / export rules
+   --------------------------------------------------------------------- */
+.report-examstats .table,
+.report-examstats .card,
+.report-examstats .progress,
+.report-examstats .re-leaderboard-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+@media print {
+    /*
+     * Every rule below is scoped to body.report-examstats (added via
+     * $PAGE->add_body_class() in index.php) so none of this can ever
+     * affect printing on any other Moodle page. Bare html/body selectors
+     * previously used here were flagged as a global CSS leak — an
+     * unscoped "body * { visibility: hidden; }" would have hidden the
+     * entire content of any unrelated page printed while this plugin is
+     * installed, not just this report.
+     */
+    body.report-examstats {
+        background: #fff !important;
+    }
+
+    body.report-examstats * {
+        visibility: hidden;
+    }
+
+    body.report-examstats #re-analytics-dashboard,
+    body.report-examstats #re-analytics-dashboard * {
+        visibility: visible;
+    }
+
+    body.report-examstats #re-analytics-dashboard {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        display: block !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+
+    /*
+     * Force a white background and dark text on every element inside the
+     * report, regardless of the site theme (fixes dark-mode themes
+     * printing a navy/black background instead of white).
+     *
+     * Two exceptions are carved out here because they rely on their own
+     * background colour to convey meaning:
+     *  - .re-kpi-inner: the KPI summary cards' intentional colour gradient.
+     *  - .progress-bar: the Passed/Failed bar fill (green/red).
+     *
+     * Note: the <html> element itself can't be scoped this way (Moodle
+     * only lets plugins add classes to <body>, not <html>), so that part
+     * of the dark-theme fix is instead handled by dashboard.js, which sets
+     * an inline style on document.documentElement during the beforeprint
+     * event — inline styles always win regardless of stylesheet order,
+     * and the listener is only ever attached on this report's own page.
+     */
+    body.report-examstats #re-analytics-dashboard {
+        background: #fff !important;
+    }
+
+    body.report-examstats #re-analytics-dashboard *:not(.re-kpi-inner):not(.re-kpi-inner *):not(.progress-bar) {
+        background: #fff !important;
+        background-image: none !important;
+        color: #000 !important;
+        box-shadow: none !important;
+    }
+
+    body.report-examstats #re-analytics-dashboard .progress-bar {
+        color: #fff !important;
+    }
+
+    body.report-examstats .re-no-print {
+        display: none !important;
+    }
+}
