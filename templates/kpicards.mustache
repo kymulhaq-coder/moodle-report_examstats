@@ -1,0 +1,148 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template report_examstats/kpicards
+
+    KPI summary cards row: Attendance, Absent, and Cutoff(s)/Active Mode.
+    Layout differs slightly between combined (Theory + Skill) and single
+    exam mode, controlled by the iscombined flag.
+
+    Context variables required for this template:
+    * iscombined - bool
+    * strattendance - string
+    * strabsent - string
+    * strdidnotattempt - string
+
+    -- Attendance card --
+    * attendpct - number
+    * presentcount - int
+    * totalenrolled - int
+    * presentlabel - string ("present in both" or "present out of")
+      Note: rendering order differs by mode — combined mode shows
+      "count / total label" (e.g. "33 / 40 present in both"), single
+      mode shows "count label total" (e.g. "4 present out of 5").
+
+    -- Combined-only fields (when iscombined is true) --
+    * ptheorycount - int
+    * pskillcount - int
+
+    -- Cutoff card(s) --
+    * strtheorycutoff / strskillcutoff / strpassingcutoff - string
+    * stroutof - string
+    * theorycutoffval, theorymax - number (combined mode)
+    * skillcutoffval, skillmax - number (combined mode)
+    * activecutoffval, activemax - number (single mode)
+    * stractivemode - string
+    * activemodelabel - string ("Single Theory" / "Single Skill Exam", single mode only)
+
+    Example context (json):
+    {
+        "iscombined": true,
+        "strattendance": "Attendance",
+        "strabsent": "Absent",
+        "strdidnotattempt": "did not attempt",
+        "attendpct": 82.5,
+        "presentcount": 33,
+        "totalenrolled": 40,
+        "presentlabel": "present in both",
+        "ptheorycount": 36,
+        "pskillcount": 34,
+        "absentcount": 7,
+        "strtheorycutoff": "Theory Cutoff",
+        "strskillcutoff": "Skill Cutoff",
+        "stroutof": "out of",
+        "theorycutoffval": 50,
+        "theorymax": 100,
+        "skillcutoffval": 25,
+        "skillmax": 50
+    }
+}}
+<div class="row mb-4">
+
+  {{! Card 1 - Attendance (blue) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#1a6dff,#00c6ff);">
+      <div class="re-kpi-label">{{strattendance}}</div>
+      <div class="re-kpi-val">{{attendpct}}%</div>
+      <div class="re-kpi-sub">
+        {{#iscombined}}{{presentcount}} / {{totalenrolled}} {{presentlabel}}{{/iscombined}}
+        {{^iscombined}}{{presentcount}} {{presentlabel}} {{totalenrolled}}{{/iscombined}}
+      </div>
+      <div class="re-kpi-sub2">
+        {{#iscombined}}
+        P in Theory: <strong>{{ptheorycount}}</strong> &nbsp;|&nbsp; P in Skill: <strong>{{pskillcount}}</strong>
+        {{/iscombined}}
+        {{^iscombined}}&nbsp;{{/iscombined}}
+      </div>
+    </div>
+  </div>
+
+  {{! Card 2 - Absent (slate) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#485563,#29323c);">
+      <div class="re-kpi-label">{{strabsent}}</div>
+      <div class="re-kpi-val">{{absentcount}}</div>
+      <div class="re-kpi-sub">{{strdidnotattempt}}</div>
+      <div class="re-kpi-sub2">&nbsp;</div>
+    </div>
+  </div>
+
+  {{#iscombined}}
+  {{! Card 3 - Theory Cutoff (purple to pink) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#7b2ff7,#e83e8c);">
+      <div class="re-kpi-label">{{strtheorycutoff}}</div>
+      <div class="re-kpi-val">{{theorycutoffval}}</div>
+      <div class="re-kpi-sub">{{stroutof}} {{theorymax}}</div>
+      <div class="re-kpi-sub2">&nbsp;</div>
+    </div>
+  </div>
+
+  {{! Card 4 - Skill Cutoff (green) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;">
+      <div class="re-kpi-label">{{strskillcutoff}}</div>
+      <div class="re-kpi-val" style="color:#fff;">{{skillcutoffval}}</div>
+      <div class="re-kpi-sub">{{stroutof}} {{skillmax}}</div>
+      <div class="re-kpi-sub2">&nbsp;</div>
+    </div>
+  </div>
+  {{/iscombined}}
+
+  {{^iscombined}}
+  {{! Card 3 - Passing Cutoff (purple to pink) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#7b2ff7,#e83e8c);">
+      <div class="re-kpi-label">{{strpassingcutoff}}</div>
+      <div class="re-kpi-val">{{activecutoffval}}</div>
+      <div class="re-kpi-sub">{{stroutof}} {{activemax}}</div>
+      <div class="re-kpi-sub2">&nbsp;</div>
+    </div>
+  </div>
+
+  {{! Card 4 - Active Mode (green) }}
+  <div class="col-6 col-md-3 mb-3">
+    <div class="re-kpi-inner" style="background:linear-gradient(135deg,#11998e,#38ef7d);">
+      <div class="re-kpi-label">{{stractivemode}}</div>
+      <div class="re-kpi-val re-kpi-val-text">{{activemodelabel}}</div>
+      <div class="re-kpi-sub">&nbsp;</div>
+      <div class="re-kpi-sub2">&nbsp;</div>
+    </div>
+  </div>
+  {{/iscombined}}
+
+</div>

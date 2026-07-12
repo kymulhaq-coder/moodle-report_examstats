@@ -1,0 +1,130 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template report_examstats/filterform
+
+    Course / Theory exam / Skill exam / Calculation basis filter form.
+
+    Context variables required for this template:
+    * courseurl - string - form action URL (index.php)
+    * courses - array of {id, fullname, selected} - course dropdown options
+    * courseselected - bool - whether a course has been chosen (courseid > 0)
+    * theoryquizzes - array of {id, name, selected} - Theory quiz options
+    * skillquizzes - array of {id, name, selected} - Skill quiz options
+    * calcbasisoptions - array of {value, label, selected} - Calculation basis options
+    * strcourse - string
+    * strselectcourse - string
+    * strtheoryexam - string
+    * strskillexam - string
+    * strcalcbasis - string
+    * strnonedeselect - string
+    * strapplyfilters - string
+
+    Example context (json):
+    {
+        "courseurl": "https://example.com/report/examstats/index.php",
+        "courses": [
+            {"id": 2, "fullname": "Anatomy 101", "selected": true}
+        ],
+        "courseselected": true,
+        "theoryquizzes": [
+            {"id": 5, "name": "Theory Midterm", "selected": false}
+        ],
+        "skillquizzes": [
+            {"id": 7, "name": "Skill Final", "selected": true}
+        ],
+        "calcbasisoptions": [
+            {"value": "appeared", "label": "Appeared Cohort (Standard)", "selected": true},
+            {"value": "registered", "label": "Total Cohort (KMU Rule)", "selected": false}
+        ],
+        "strcourse": "Course:",
+        "strselectcourse": "-- Select Course --",
+        "strtheoryexam": "Theory Exam:",
+        "strskillexam": "Skill Exam:",
+        "strcalcbasis": "Calculation Basis",
+        "strnonedeselect": "-- None / Deselect --",
+        "strapplyfilters": "Apply Filters"
+    }
+}}
+<div class="card mb-4 border-0 shadow-sm re-no-print" style="border-radius: 12px; background: #ffffff;">
+  <div class="card-body p-4">
+    <form method="get" action="{{courseurl}}" class="m-0">
+      <div class="row align-items-end">
+
+        {{^courseselected}}
+        <div class="col-md-6 col-lg-4">
+          <label class="re-filter-label"><i class="fa fa-graduation-cap mr-1 text-muted"></i> {{strcourse}}</label>
+          <select name="courseid" class="form-control re-filter-input" data-action="re-submit-on-change">
+            <option value="0">{{strselectcourse}}</option>
+            {{#courses}}
+            <option value="{{id}}" {{#selected}}selected{{/selected}}>{{fullname}}</option>
+            {{/courses}}
+          </select>
+        </div>
+        {{/courseselected}}
+
+        {{#courseselected}}
+        <div class="col-xl-3 col-md-6 mb-3 mb-xl-0">
+          <label class="re-filter-label"><i class="fa fa-graduation-cap mr-1 text-muted"></i> {{strcourse}}</label>
+          <select name="courseid" class="form-control re-filter-input" data-action="re-submit-on-change">
+            <option value="0">{{strselectcourse}}</option>
+            {{#courses}}
+            <option value="{{id}}" {{#selected}}selected{{/selected}}>{{fullname}}</option>
+            {{/courses}}
+          </select>
+        </div>
+
+        <div class="col-xl-2 col-md-6 mb-3 mb-xl-0">
+          <label class="re-filter-label"><i class="fa fa-book mr-1 text-muted"></i> {{strtheoryexam}}</label>
+          <select name="quizid_theory" class="form-control re-filter-input">
+            <option value="0">{{strnonedeselect}}</option>
+            {{#theoryquizzes}}
+            <option value="{{id}}" {{#selected}}selected{{/selected}}>{{name}}</option>
+            {{/theoryquizzes}}
+          </select>
+        </div>
+
+        <div class="col-xl-2 col-md-6 mb-3 mb-xl-0">
+          <label class="re-filter-label"><i class="fa fa-stethoscope mr-1 text-muted"></i> {{strskillexam}}</label>
+          <select name="quizid_skill" class="form-control re-filter-input">
+            <option value="0">{{strnonedeselect}}</option>
+            {{#skillquizzes}}
+            <option value="{{id}}" {{#selected}}selected{{/selected}}>{{name}}</option>
+            {{/skillquizzes}}
+          </select>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-3 mb-xl-0">
+          <label class="re-filter-label"><i class="fa fa-calculator mr-1 text-muted"></i> {{strcalcbasis}}</label>
+          <select name="calc_basis" class="form-control re-filter-input">
+            {{#calcbasisoptions}}
+            <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+            {{/calcbasisoptions}}
+          </select>
+        </div>
+
+        <div class="col-xl-2 col-md-6">
+          <button type="submit" class="btn re-filter-btn">
+            <i class="fa fa-filter mr-2"></i> {{strapplyfilters}}
+          </button>
+        </div>
+        {{/courseselected}}
+
+      </div>
+    </form>
+  </div>
+</div>

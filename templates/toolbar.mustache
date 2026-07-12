@@ -1,0 +1,92 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template report_examstats/toolbar
+
+    Print Report button and Download CSV dropdown menu.
+
+    Context variables required for this template:
+    * urlhighachievers - string
+    * urlsatisfactory - string
+    * urlborderline - string
+    * urlfailed - string
+    * urlcomplete - string
+    * bandamin - number - Band A minimum % (for the "High Achievers" label)
+    * bandbmin - number - Band B minimum % (for the "Satisfactory" label)
+    * bandbmax - number - Band A minimum minus 1 (Satisfactory's upper bound)
+    * bandcmin - number - Band C minimum % (for the "Borderline" label)
+    * bandcmax - number - Band B minimum minus 1 (Borderline's upper bound)
+    * strprintreport - string
+    * strdownloadcsv - string
+    * strbyperformanceband - string
+    * strhighachievers - string - Band A label (admin-configurable)
+    * strsatisfactory - string - Band B label (admin-configurable)
+    * strborderline - string - Band C label (admin-configurable)
+    * strfailedstudents - string - Band D label (admin-configurable)
+    * strcompleteresult - string
+
+    Example context (json):
+    {
+        "urlhighachievers": "https://example.com/report/examstats/index.php?export=highachievers",
+        "urlsatisfactory": "https://example.com/report/examstats/index.php?export=satisfactory",
+        "urlborderline": "https://example.com/report/examstats/index.php?export=borderline",
+        "urlfailed": "https://example.com/report/examstats/index.php?export=failed",
+        "urlcomplete": "https://example.com/report/examstats/index.php?export=completeresult",
+        "bandamin": 80,
+        "bandbmin": 60,
+        "bandbmax": 79,
+        "bandcmin": 50,
+        "bandcmax": 59,
+        "strprintreport": "Print Report",
+        "strdownloadcsv": "Download (CSV)",
+        "strbyperformanceband": "By Performance Band",
+        "strhighachievers": "High Achievers",
+        "strsatisfactory": "Satisfactory",
+        "strborderline": "Borderline",
+        "strfailedstudents": "Failed Students",
+        "strcompleteresult": "Complete Result"
+    }
+}}
+<div class="d-flex justify-content-end mb-3 re-no-print">
+  <button data-action="re-print-report" class="btn btn-outline-info btn-sm mr-2">
+    <i class="fa fa-print mr-1"></i> {{strprintreport}}
+  </button>
+  <div class="epr-dropdown re-no-print">
+    <button type="button" data-action="re-toggle-csv-menu" class="btn btn-danger btn-sm">
+      <i class="fa fa-download mr-1"></i> {{strdownloadcsv}} &nbsp;&#9660;
+    </button>
+    <div class="epr-dropdown-menu" id="epr-csv-menu">
+      <div class="epr-dropdown-header">{{strbyperformanceband}}</div>
+      <a href="{{urlhighachievers}}">
+        <i class="fa fa-star text-warning mr-1"></i> {{strhighachievers}} (&ge; {{bandamin}}%)
+      </a>
+      <a href="{{urlsatisfactory}}">
+        <i class="fa fa-thumbs-up text-success mr-1"></i> {{strsatisfactory}} ({{bandbmin}}&ndash;{{bandbmax}}%)
+      </a>
+      <a href="{{urlborderline}}">
+        <i class="fa fa-exclamation-circle text-warning mr-1"></i> {{strborderline}} ({{bandcmin}}&ndash;{{bandcmax}}%)
+      </a>
+      <a href="{{urlfailed}}">
+        <i class="fa fa-times-circle text-danger mr-1"></i> {{strfailedstudents}} (&lt; {{bandcmin}}%)
+      </a>
+      <div class="epr-dropdown-divider"></div>
+      <a href="{{urlcomplete}}">
+        <i class="fa fa-table mr-1"></i> {{strcompleteresult}}
+      </a>
+    </div>
+  </div>
+</div>
