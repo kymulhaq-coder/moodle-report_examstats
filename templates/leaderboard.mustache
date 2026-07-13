@@ -24,7 +24,7 @@
     * strscoresuffix - string - "Combined Total" or "Points" label shown under each score
     * performers - array of:
         * rank - int - 1-5
-        * userpictureurl - string - rendered user picture HTML (already safe/escaped by core)
+        * userpictureurl - string - rendered user picture HTML from $OUTPUT->user_picture(), including an alt attribute (already safe/escaped by core)
         * fullname - string - student's full name (already escaped)
         * score - number - achieved score
 
@@ -35,7 +35,7 @@
         "performers": [
             {
                 "rank": 1,
-                "userpictureurl": "<img src=\"...\" />",
+                "userpictureurl": "<img src=\"...\" alt=\"Jane Doe\">",
                 "fullname": "Jane Doe",
                 "score": 87.5
             }
