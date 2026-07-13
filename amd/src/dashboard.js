@@ -26,26 +26,71 @@
  */
 
 /**
+ * Force a white background and dark text on the report during print,
+ * regardless of the site theme (fixes dark-mode themes printing a
+ * navy/black background instead of white).
+ *
+ * This used to be done with `!important` CSS rules, but Moodle's coding
+ * guidelines disallow `!important` in stylesheets. Inline styles set via
+ * JavaScript always win over any external stylesheet rule (with or
+ * without !important) without needing !important themselves here, so
+ * this achieves the same guaranteed override safely from JS instead.
+ *
+ * Two exceptions are skipped because they rely on their own background
+ * colour to convey meaning:
+ *  - .re-kpi-inner (and its descendants): the KPI cards' colour gradient.
+ *  - .progress-bar: the Passed/Failed bar fill (green/red).
+ */
+const forcePrintColours = () => {
+    document.documentElement.style.setProperty('background', '#fff', 'important');
+    document.body.style.setProperty('background', '#fff', 'important');
+
+    const dashboard = document.getElementById('re-analytics-dashboard');
+    if (!dashboard) {
+        return;
+    }
+    dashboard.style.setProperty('background', '#fff', 'important');
+
+    dashboard.querySelectorAll('*').forEach((el) => {
+        if (el.closest('.re-kpi-inner') || el.classList.contains('progress-bar')) {
+            return;
+        }
+        el.style.setProperty('background', '#fff', 'important');
+        el.style.setProperty('background-image', 'none', 'important');
+        el.style.setProperty('color', '#000', 'important');
+        el.style.setProperty('box-shadow', 'none', 'important');
+    });
+};
+
+/**
+ * Undo forcePrintColours() once printing has finished, so normal
+ * on-screen browsing is never affected.
+ */
+const clearPrintColours = () => {
+    document.documentElement.style.removeProperty('background');
+    document.body.style.removeProperty('background');
+
+    const dashboard = document.getElementById('re-analytics-dashboard');
+    if (!dashboard) {
+        return;
+    }
+    dashboard.style.removeProperty('background');
+
+    dashboard.querySelectorAll('*').forEach((el) => {
+        el.style.removeProperty('background');
+        el.style.removeProperty('background-image');
+        el.style.removeProperty('color');
+        el.style.removeProperty('box-shadow');
+    });
+};
+
+/**
  * Initialise the dashboard print button, CSV dropdown, and course
  * filter auto-submit behaviour.
  */
 export const init = () => {
-    // Belt-and-braces fix for dark-mode themes: our stylesheet's
-    // "html, body { background: #fff !important; }" print rule can still
-    // lose to a more specific theme selector (e.g. "body.pagelayout-report")
-    // even with !important, since specificity is the tiebreaker between two
-    // !important declarations. An inline style bypasses that entirely, since
-    // inline declarations win over any external stylesheet rule. Applied
-    // just before printing and removed just after, so normal browsing is
-    // never affected.
-    window.addEventListener('beforeprint', () => {
-        document.documentElement.style.setProperty('background', '#fff', 'important');
-        document.body.style.setProperty('background', '#fff', 'important');
-    });
-    window.addEventListener('afterprint', () => {
-        document.documentElement.style.removeProperty('background');
-        document.body.style.removeProperty('background');
-    });
+    window.addEventListener('beforeprint', forcePrintColours);
+    window.addEventListener('afterprint', clearPrintColours);
 
     // Print Report button.
     const printBtn = document.querySelector('[data-action="re-print-report"]');
