@@ -30,7 +30,7 @@
    Layout & labels
    --------------------------------------------------------------------- */
 .report-examstats .re-label {
-    color: #343a40 !important;
+    color: #343a40;
     font-weight: bold;
     margin-right: 8px;
 }
@@ -43,40 +43,40 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #5a6675 !important;
+    color: #5a6675;
     margin-bottom: 7px;
     display: block;
 }
 
 .report-examstats .re-filter-input {
-    height: 42px !important;
-    border-radius: 8px !important;
-    border: 1px solid #dce1e7 !important;
-    background-color: #f8fafc !important;
-    color: #2d3748 !important;
-    font-size: 0.92rem !important;
-    padding: 0 12px !important;
-    transition: all 0.2s ease-in-out !important;
-    box-shadow: none !important;
+    height: 42px;
+    border-radius: 8px;
+    border: 1px solid #dce1e7;
+    background-color: #f8fafc;
+    color: #2d3748;
+    font-size: 0.92rem;
+    padding: 0 12px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: none;
     width: 100%;
 }
 
 .report-examstats .re-filter-input:focus {
-    border-color: #1a6dff !important;
-    background-color: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(26, 109, 255, 0.12) !important;
+    border-color: #1a6dff;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(26, 109, 255, 0.12);
 }
 
 .report-examstats .re-filter-btn {
-    height: 42px !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.92rem !important;
-    background: #1a6dff !important;
-    color: #fff !important;
-    border: none !important;
-    box-shadow: 0 4px 12px rgba(26, 109, 255, 0.2) !important;
-    transition: all 0.2s ease !important;
+    height: 42px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    background: #1a6dff;
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 12px rgba(26, 109, 255, 0.2);
+    transition: all 0.2s ease;
     width: 100%;
     display: inline-flex;
     align-items: center;
@@ -84,10 +84,10 @@
 }
 
 .report-examstats .re-filter-btn:hover {
-    background: #0056e0 !important;
-    color: #fff !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 16px rgba(26, 109, 255, 0.28) !important;
+    background: #0056e0;
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(26, 109, 255, 0.28);
 }
 
 .report-examstats .re-section-heading {
@@ -255,16 +255,23 @@
     /*
      * Every rule below is scoped to body.report-examstats (added via
      * $PAGE->add_body_class() in index.php) so none of this can ever
-     * affect printing on any other Moodle page. Bare html/body selectors
-     * previously used here were flagged as a global CSS leak — an
-     * unscoped "body * { visibility: hidden; }" would have hidden the
-     * entire content of any unrelated page printed while this plugin is
-     * installed, not just this report.
+     * affect printing on any other Moodle page.
+     *
+     * This block intentionally avoids !important. The #re-analytics-dashboard
+     * rules rely on ID-selector specificity (very hard for a theme to
+     * accidentally out-rank), and the .re-no-print / visibility rules
+     * target classes unique to this plugin, so nothing here needs to
+     * fight a competing theme declaration by force.
+     *
+     * The one thing CSS alone cannot reliably win is overriding a dark
+     * theme's own background/text colours (theme rules can tie or beat
+     * ours on specificity even with !important, and a bare <html>
+     * selector can't be scoped to this plugin at all since Moodle only
+     * lets plugins add classes to <body>). That part is instead handled
+     * by dashboard.js, which sets inline styles on beforeprint (inline
+     * styles always win over any external stylesheet rule) and clears
+     * them again on afterprint.
      */
-    body.report-examstats {
-        background: #fff !important;
-    }
-
     body.report-examstats * {
         visibility: hidden;
     }
@@ -279,46 +286,14 @@
         left: 0;
         top: 0;
         width: 100%;
-        display: block !important;
-        border: none !important;
-        box-shadow: none !important;
-        background: transparent !important;
-        padding: 0 !important;
-    }
-
-    /*
-     * Force a white background and dark text on every element inside the
-     * report, regardless of the site theme (fixes dark-mode themes
-     * printing a navy/black background instead of white).
-     *
-     * Two exceptions are carved out here because they rely on their own
-     * background colour to convey meaning:
-     *  - .re-kpi-inner: the KPI summary cards' intentional colour gradient.
-     *  - .progress-bar: the Passed/Failed bar fill (green/red).
-     *
-     * Note: the <html> element itself can't be scoped this way (Moodle
-     * only lets plugins add classes to <body>, not <html>), so that part
-     * of the dark-theme fix is instead handled by dashboard.js, which sets
-     * an inline style on document.documentElement during the beforeprint
-     * event — inline styles always win regardless of stylesheet order,
-     * and the listener is only ever attached on this report's own page.
-     */
-    body.report-examstats #re-analytics-dashboard {
-        background: #fff !important;
-    }
-
-    body.report-examstats #re-analytics-dashboard *:not(.re-kpi-inner):not(.re-kpi-inner *):not(.progress-bar) {
-        background: #fff !important;
-        background-image: none !important;
-        color: #000 !important;
-        box-shadow: none !important;
-    }
-
-    body.report-examstats #re-analytics-dashboard .progress-bar {
-        color: #fff !important;
+        display: block;
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
     }
 
     body.report-examstats .re-no-print {
-        display: none !important;
+        display: none;
     }
 }
