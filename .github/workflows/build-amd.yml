@@ -1,0 +1,76 @@
+name: Build AMD modules
+
+# Runs Moodle's real Grunt/Babel/Rollup/Terser toolchain against amd/src/
+# and commits the correctly-built amd/build/ output back to the branch.
+#
+# This exists because amd/build/dashboard.min.js cannot be hand-built to
+# byte-match what Moodle's official CI (moodle-plugin-ci grunt) expects —
+# that check re-runs the real Moodle build and compares output exactly.
+# This workflow runs that same real build and auto-commits the result,
+# so amd/build/ never goes stale again after editing amd/src/dashboard.js.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'amd/src/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      # Installs a full throwaway Moodle core checkout at ./moodle, with
+      # this plugin placed at moodle/report/examstats — the same layout
+      # the main CI workflow uses, including npm dependencies for Grunt.
+      - name: Install moodle-plugin-ci
+        run: moodle-plugin-ci install --plugin ./plugin --no-init --db-host=127.0.0.1
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+
+      # Run Moodle's actual AMD build (Babel + Rollup + Terser) scoped to
+      # just this plugin, using Moodle core's own Gruntfile and tooling.
+      - name: Build AMD modules with Moodle's real Grunt toolchain
+        working-directory: moodle
+        run: npx grunt amd --root=report/examstats
+
+      - name: Copy rebuilt output back into the plugin checkout
+        run: |
+          rm -rf plugin/amd/build
+          cp -r moodle/report/examstats/amd/build plugin/amd/build
+
+      - name: Commit and push if amd/build changed
+        working-directory: plugin
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add amd/build
+          if git diff --cached --quiet; then
+            echo "amd/build is already up to date, nothing to commit."
+          else
+            git commit -m "Auto-rebuild amd/build with Moodle's Grunt toolchain [skip ci]"
+            git push
+          fi
